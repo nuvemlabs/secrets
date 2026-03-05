@@ -29,7 +29,8 @@
 #   Initialization
 # ─────────────────────────────────────────────────────────────────────────────
 
-SECRETS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Support both bash (BASH_SOURCE) and zsh (%x prompt expansion)
+SECRETS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)"
 
 # Default service namespace (callers can set this before sourcing)
 : "${SECRETS_SERVICE:=secrets}"
