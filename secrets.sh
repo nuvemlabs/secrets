@@ -30,7 +30,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Support both bash (BASH_SOURCE) and zsh (%x prompt expansion)
-SECRETS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)"
+if [ -n "$ZSH_VERSION" ]; then
+    SECRETS_DIR="${${(%):-%x}:A:h}"
+elif [ -n "$BASH_SOURCE" ]; then
+    SECRETS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    # Fallback to a known location
+    SECRETS_DIR="${HOME}/.local/lib/secrets"
+fi
 
 # Default service namespace (callers can set this before sourcing)
 : "${SECRETS_SERVICE:=secrets}"
