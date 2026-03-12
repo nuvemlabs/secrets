@@ -30,7 +30,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Support both bash (BASH_SOURCE) and zsh (%x prompt expansion)
-if [ -n "$ZSH_VERSION" ]; then
+if [ -n "${ZSH_VERSION:-}" ]; then
     SECRETS_DIR="${${(%):-%x}:A:h}"
 elif [ -n "$BASH_SOURCE" ]; then
     SECRETS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
