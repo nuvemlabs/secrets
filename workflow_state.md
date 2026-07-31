@@ -18,3 +18,13 @@
 - Task 5: Created credmanager.sh with PowerShell-based Windows Credential Manager functions, wrote test_credmanager.sh, fixed module detection to check output (not just exit code), skips correctly on non-Windows
 - All tests verified passing: 16 pass across file + keychain, 2 suites skip gracefully (libsecret, credmanager)
 - Task 6: Created secrets.sh (public API + backend detection + sourcing) and tests/test_api.sh (22 tests). Fixed `set -u` compat with `${1:-}` defaults. Fixed grep `--` for option-like strings. All 38 tests pass across 5 suites.
+
+## Log — 2026-07-31 secrets-doctor CLI added (moved from dotfiles util-scripts)
+
+- bin/secrets-doctor: propagation diagnostic (store → exports file → env), names-only default,
+  opt-in --probe/--match in-process value validation. Genericized: SECRETS_EXPORTS_FILE config,
+  lib resolved from checkout sibling or ~/.local/lib/secrets. Fixed known-key set to include
+  derived export aliases (caught by new tests).
+- install.sh: installs bin/ tools to ~/.local/bin (SECRETS_BIN_DIR override), chmod +x.
+- tests/test_doctor.sh: 20 assertions incl. leak-proofing (no value on stdout/stderr/bash -x).
+- README.md: CLI Tools section + new config vars.

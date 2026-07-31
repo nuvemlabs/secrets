@@ -54,6 +54,14 @@ secret_delete MY_API_KEY
 
 All commands accept `-h` / `--help` for usage details.
 
+## CLI Tools
+
+Installed to `~/.local/bin` by `install.sh` (ensure it is on your PATH):
+
+| Tool | Description |
+|------|-------------|
+| `secrets-doctor [KEY\|PREFIX ...]` | Diagnose secret propagation (store → exports file → shell env) without printing values. `--probe` flags empty/malformed stored values in-process; `--match REGEX` adds a shape check. Exit 0 = chain intact, 1 = broken. See `secrets-doctor --help`. |
+
 ## Configuration
 
 | Variable | Default | Description |
@@ -62,6 +70,8 @@ All commands accept `-h` / `--help` for usage details.
 | `SECRETS_FILE_PATH` | `~/.accessTokens` | Override the file fallback path |
 | `SECRETS_POWERSHELL` | `powershell.exe` | Override the PowerShell binary (Windows only) |
 | `SECRETS_INSTALL_DIR` | `~/.local/lib/secrets` | Override install location (used by `install.sh`) |
+| `SECRETS_BIN_DIR` | `~/.local/bin` | Override CLI tools install location (used by `install.sh`) |
+| `SECRETS_EXPORTS_FILE` | (unset) | Shell file with `export KEY="$(secret KEY)"` lines, read by `secrets-doctor` |
 
 ## Platform Details
 
