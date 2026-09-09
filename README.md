@@ -49,6 +49,7 @@ secret_delete MY_API_KEY
 | `secret_fz -a` | Interactive selection across all services |
 | `secret_fz -p` | Interactive selection with value preview |
 | `secret_fz -c` | Select and copy value to clipboard |
+| `secret_unlock` | Unlock a locked macOS login keychain from the terminal (keychain backend only; `security` prompts on the TTY). `secret` points here when it exits 2 with "keychain is locked" |
 
 **Aliases:** `sl` for `secret_list`, `sfz` for `secret_fz`
 
@@ -72,6 +73,8 @@ Installed to `~/.local/bin` by `install.sh` (ensure it is on your PATH):
 | `SECRETS_INSTALL_DIR` | `~/.local/lib/secrets` | Override install location (used by `install.sh`) |
 | `SECRETS_BIN_DIR` | `~/.local/bin` | Override CLI tools install location (used by `install.sh`) |
 | `SECRETS_EXPORTS_FILE` | (unset) | Shell file with `export KEY="$(secret KEY)"` lines, read by `secrets-doctor` |
+| `SECRETS_KEYCHAIN` | `~/Library/Keychains/login.keychain-db` | Keychain file checked/unlocked by `secret_unlock` (macOS only) |
+| `SECRETS_AUTO_UNLOCK` | `0` | Set to `1` to prompt once on the TTY at source time when the keychain is locked (macOS only). Never prompts without a TTY |
 
 ## Platform Details
 

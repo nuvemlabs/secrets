@@ -85,6 +85,24 @@ run_doctor() {
         "$DOCTOR" "$@" 2>&1
 }
 
+# Locked-keychain stub: same keys, but the library reports the store locked.
+# secret() leaves a marker so "never probed while locked" can be asserted,
+# and the library records SECRETS_AUTO_UNLOCK as the doctor sourced it.
+cat > "$TMPDIR_TEST/stub-lib-locked.sh" << EOF
+__SECRETS_BACKEND=keychain
+__secret_keychain_locked() { return 0; }
+echo "\${SECRETS_AUTO_UNLOCK:-unset}" > "$TMPDIR_TEST/auto-unlock-seen"
+secret() { touch "$TMPDIR_TEST/secret-called"; printf '%s' "$SECRET_VALUE"; }
+secret_list() { printf 'GOODKEY\nEMPTYKEY\nCTRLKEY\nORPHANKEY\n'; }
+EOF
+
+run_doctor_locked() {
+    SECRETS_LIB="$TMPDIR_TEST/stub-lib-locked.sh" \
+    SECRETS_EXPORTS_FILE="$TMPDIR_TEST/stub-exports.sh" \
+    GOODKEY="$SECRET_VALUE" ALIASKEY="$SECRET_VALUE" \
+        "$DOCTOR" "$@" 2>&1
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 #   Tests
 # ─────────────────────────────────────────────────────────────────────────────
@@ -143,6 +161,29 @@ assert_not_contains "no value leak in bash -x trace" "$trace" "$SECRET_VALUE"
 # Unknown option
 run_doctor --bogus >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq "unknown option exits 2" "2" "$rc"
+
+# Locked keychain: STORE reports locked, footer hints the fix, exit 1
+out="$(run_doctor_locked GOODKEY)" && rc=0 || rc=$?
+assert_eq "locked keychain exits 1" "1" "$rc"
+assert_contains "locked keychain STORE locked" "$out" "locked"
+assert_contains "locked keychain footer hints secret_unlock" "$out" "secret_unlock"
+assert_not_contains "locked keychain does not report MISSING" "$out" "MISSING"
+
+# Locked keychain: derived alias is still n/a (lock only affects store reads)
+out="$(run_doctor_locked ALIASKEY)" || true
+assert_contains "locked keychain derived alias STORE n/a" "$out" "n/a"
+
+# Locked keychain + --probe: never reads a value, never leaks one
+rm -f "$TMPDIR_TEST/secret-called"
+out="$(run_doctor_locked --probe GOODKEY EMPTYKEY)" && rc=0 || rc=$?
+assert_eq "locked keychain --probe exits 1" "1" "$rc"
+assert_contains "locked keychain --probe still reports locked" "$out" "locked"
+assert_not_contains "locked keychain --probe never reads a value" "$out" "$SECRET_VALUE"
+assert_eq "locked keychain --probe never calls secret" "absent" "$([[ -e "$TMPDIR_TEST/secret-called" ]] && echo present || echo absent)"
+
+# The doctor never lets the library prompt, whatever the caller's shell set
+SECRETS_AUTO_UNLOCK=1 run_doctor_locked GOODKEY >/dev/null 2>&1 || true
+assert_eq "doctor sources the library with auto-unlock off" "0" "$(cat "$TMPDIR_TEST/auto-unlock-seen")"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #   Summary

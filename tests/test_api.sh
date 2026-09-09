@@ -23,12 +23,14 @@ source "$SCRIPT_DIR/../secrets.sh"
 PASS_COUNT=0
 FAIL_COUNT=0
 TEST_KEYS=()
+STUB_DIR=""
 
 cleanup() {
     # Delete all test entries created during this run
-    for key in "${TEST_KEYS[@]}"; do
+    for key in ${TEST_KEYS+"${TEST_KEYS[@]}"}; do
         secret_delete "$key" &>/dev/null || true
     done
+    [[ -n "${STUB_DIR:-}" ]] && rm -rf "$STUB_DIR"
 }
 trap cleanup EXIT
 
@@ -104,16 +106,120 @@ echo "  Service namespace: $SECRETS_SERVICE"
 echo "  Detected backend:  $__SECRETS_BACKEND"
 echo ""
 
+# ─────────────────────────────────────────────────────────────────────────────
+#   Hermetic Keychain Tests (stubbed `security`, keychain backend forced)
+# ─────────────────────────────────────────────────────────────────────────────
+
+STUB_DIR="$(mktemp -d)"
+cat > "$STUB_DIR/security" << 'EOF'
+#!/bin/bash
+[[ -n "${STUB_SECURITY_LOG:-}" ]] && echo "$*" >> "$STUB_SECURITY_LOG"
+case "${1:-}" in
+    find-generic-password) exit "${STUB_SECURITY_FIND_RC:-44}" ;;
+    show-keychain-info)    exit "${STUB_SECURITY_INFO_RC:-0}" ;;
+    unlock-keychain)       exit "${STUB_SECURITY_UNLOCK_RC:-0}" ;;
+    *)                     exit 1 ;;
+esac
+EOF
+chmod +x "$STUB_DIR/security"
+REAL_PATH="$PATH"
+PATH="$STUB_DIR:$PATH"
+export STUB_SECURITY_LOG="$STUB_DIR/calls.log"
+saved_backend="$__SECRETS_BACKEND"
+__SECRETS_BACKEND="keychain"
+# On non-macOS the keychain backend was never sourced
+declare -f __secret_get_keychain >/dev/null || source "$SCRIPT_DIR/../backends/keychain.sh"
+stub_key="stub-key-$$"     # unique so no file-backend fallback can match it
+
+echo "-- secret: keychain locked (security exit 36) --"
+export STUB_SECURITY_FIND_RC=36
+rc=0
+out=$(secret "$stub_key" 2>"$STUB_DIR/stderr") || rc=$?
+assert_eq "locked keychain returns exit 2" "2" "$rc"
+assert_eq "locked keychain prints nothing on stdout" "" "$out"
+assert_contains "locked keychain stderr hints secret_unlock" "run: secret_unlock" "$(cat "$STUB_DIR/stderr")"
+assert_contains "locked keychain stderr names the security exit code" "security exit 36" "$(cat "$STUB_DIR/stderr")"
+rc=0
+out=$(secret -a "$stub_key" 2>"$STUB_DIR/stderr") || rc=$?
+assert_eq "locked keychain with -a returns exit 2" "2" "$rc"
+assert_contains "locked keychain with -a hints secret_unlock" "run: secret_unlock" "$(cat "$STUB_DIR/stderr")"
+
+echo "-- secret: item not found (security exit 44) --"
+export STUB_SECURITY_FIND_RC=44
+rc=0
+out=$(secret "$stub_key" 2>"$STUB_DIR/stderr") || rc=$?
+assert_eq "missing key still returns exit 1" "1" "$rc"
+assert_contains "missing key still reports not found" "not found" "$(cat "$STUB_DIR/stderr")"
+
+echo "-- secret_unlock --"
+help_output=$(secret_unlock --help 2>&1)
+assert_contains "secret_unlock --help contains Usage" "Usage:" "$help_output"
+
+export STUB_SECURITY_INFO_RC=0
+rc=0
+err=$(secret_unlock 2>&1 >/dev/null) || rc=$?
+assert_eq "already unlocked returns 0" "0" "$rc"
+assert_contains "already unlocked says so" "already unlocked" "$err"
+
+export STUB_SECURITY_INFO_RC=36
+if { : </dev/tty; } 2>/dev/null; then
+    # TTY available: the (stubbed) unlock prompt path runs
+    export STUB_SECURITY_UNLOCK_RC=0
+    : > "$STUB_SECURITY_LOG"
+    rc=0
+    err=$(secret_unlock 2>&1 >/dev/null) || rc=$?
+    assert_eq "locked + TTY: successful unlock returns 0" "0" "$rc"
+    assert_contains "locked + TTY: reports unlocked" "keychain unlocked" "$err"
+    unlock_call="$(grep '^unlock-keychain' "$STUB_SECURITY_LOG")"
+    assert_eq "locked + TTY: unlock targets the keychain path only, never -p" \
+        "unlock-keychain $(__secret_keychain_path)" "$unlock_call"
+    export STUB_SECURITY_UNLOCK_RC=51
+    rc=0
+    err=$(secret_unlock 2>&1 >/dev/null) || rc=$?
+    assert_eq "locked + TTY: cancelled unlock returns security's exit code" "51" "$rc"
+    assert_contains "locked + TTY: reports skipped/failed" "skipped/failed (security exit 51)" "$err"
+else
+    # No TTY (CI, agent shells): must not attempt to prompt
+    rc=0
+    err=$(secret_unlock 2>&1 >/dev/null) || rc=$?
+    assert_eq "locked + no TTY returns 2" "2" "$rc"
+    assert_contains "locked + no TTY explains" "no TTY" "$err"
+fi
+
+__SECRETS_BACKEND="file"
+rc=0
+err=$(secret_unlock 2>&1 >/dev/null) || rc=$?
+assert_eq "non-keychain backend returns 0" "0" "$rc"
+assert_contains "non-keychain backend explains" "only applicable to the keychain backend" "$err"
+
+# Restore the real backend and `security`
+__SECRETS_BACKEND="$saved_backend"
+PATH="$REAL_PATH"
+unset STUB_SECURITY_FIND_RC STUB_SECURITY_INFO_RC STUB_SECURITY_UNLOCK_RC STUB_SECURITY_LOG
+
+# ─────────────────────────────────────────────────────────────────────────────
+#   Live Store Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Mutation tests need a reachable store: a locked macOS keychain makes every
+# write fail with security exit 36 (see secret_unlock).
+store_rc=0
+if [[ "$__SECRETS_BACKEND" != "file" ]]; then
+    register_key "api-test-key-1"
+    secret_set "api-test-key-1" "test-value-42" || store_rc=$?
+fi
+
 # Skip set/get/delete/list tests if backend is file-only (read-only)
 if [[ "$__SECRETS_BACKEND" == "file" ]]; then
     echo "SKIP: File backend is read-only; skipping set/get/delete/list mutation tests"
+    echo ""
+elif [[ $store_rc -ne 0 ]]; then
+    echo "SKIP: secret store not reachable from this process (secret_set exit $store_rc — keychain locked?); skipping mutation tests"
     echo ""
 else
 
     # Test: secret_set then secret returns value
     echo "-- secret_set + secret (get) --"
-    register_key "api-test-key-1"
-    secret_set "api-test-key-1" "test-value-42"
     result=$(secret "api-test-key-1")
     assert_eq "secret_set then secret returns correct value" "test-value-42" "$result"
 

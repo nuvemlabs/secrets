@@ -17,6 +17,7 @@
 #   secret_fz -a            - Interactive fzf selection (all services)
 #   secret_fz -p            - With preview pane showing values
 #   secret_fz -c            - Select and copy to clipboard
+#   secret_unlock           - Unlock a locked macOS login keychain (keychain backend)
 #
 # Aliases: sl (secret_list), sfz (secret_fz)
 # Use -h or --help on any command for usage info
@@ -24,6 +25,11 @@
 # Configuration:
 #   SECRETS_SERVICE  - Namespace for secrets (default: "secrets")
 #   SECRETS_FILE_PATH - Override file backend path (default: ~/.accessTokens)
+#   SECRETS_KEYCHAIN  - Keychain file for lock checks/unlock (macOS,
+#                       default: ~/Library/Keychains/login.keychain-db)
+#   SECRETS_AUTO_UNLOCK - Set to 1 to prompt once on the TTY at source time
+#                       when the keychain is locked (macOS, default: 0).
+#                       Never prompts without a TTY (scripts, CI, MCP spawns).
 
 # ─────────────────────────────────────────────────────────────────────────────
 #   Initialization
@@ -118,7 +124,10 @@ EOF
         # Search across all services
         case "$backend" in
             keychain)
+                # $(...) runs in a subshell: re-record the exit code here so
+                # __SECRETS_LAST_RC is meaningful in this shell too.
                 value=$(__secret_get_keychain_any "$key")
+                __SECRETS_LAST_RC=$?
                 ;;
             credmanager)
                 # credmanager has no cross-service search; try current service
@@ -134,12 +143,25 @@ EOF
         case "$backend" in
             keychain)
                 value=$(__secret_get_keychain "$key")
+                __SECRETS_LAST_RC=$?
                 ;;
             credmanager)
                 value=$(__secret_get_credmanager "$key")
                 ;;
             libsecret)
                 value=$(__secret_get_libsecret "$key")
+                ;;
+        esac
+    fi
+
+    # A locked keychain (36) or a denied/cancelled prompt (51) is not a missing
+    # secret: report it and stop. Falling through to the file backend here
+    # would mask the real cause behind "not found".
+    if [[ "$backend" == "keychain" ]]; then
+        case "${__SECRETS_LAST_RC:-0}" in
+            36|51)
+                echo "[secrets] keychain is locked or access was denied (security exit $__SECRETS_LAST_RC) — run: secret_unlock" >&2
+                return 2
                 ;;
         esac
     fi
@@ -227,6 +249,35 @@ EOF
             return 1
             ;;
     esac
+}
+
+secret_unlock() {
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+        cat <<EOF
+Usage: secret_unlock
+
+Unlock the macOS login keychain from this terminal (keychain backend only).
+'security' prompts for your macOS login password on the TTY; the password is
+never passed as an argument or stored by this library.
+
+Use it when 'secret' reports "keychain is locked" (security exit 36), which
+happens when no GUI prompt can be shown — e.g. inside a tmux server started
+outside the graphical login session.
+
+Set SECRETS_AUTO_UNLOCK=1 before sourcing to run this automatically at shell
+start (interactive TTY only).
+EOF
+        return 0
+    fi
+
+    local backend="$__SECRETS_BACKEND"
+
+    if [[ "$backend" != "keychain" ]]; then
+        echo "secret_unlock: only applicable to the keychain backend (current: $backend)" >&2
+        return 0
+    fi
+
+    __secret_unlock_keychain
 }
 
 secret_list() {
@@ -382,3 +433,17 @@ EOF
 
 sl() { secret_list "$@"; }
 sfz() { secret_fz "$@"; }
+
+# ─────────────────────────────────────────────────────────────────────────────
+#   Auto-Unlock (opt-in)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# With SECRETS_AUTO_UNLOCK=1, prompt once on the TTY when the keychain is
+# locked, before the caller's `secret` calls silently return empty. Runs only
+# with a controlling TTY (never in scripts, CI or MCP server spawns), is a
+# no-op once unlocked, and never aborts sourcing.
+if [[ "${SECRETS_AUTO_UNLOCK:-0}" == "1" && "$__SECRETS_BACKEND" == "keychain" ]]; then
+    if { : </dev/tty; } 2>/dev/null && __secret_keychain_locked; then
+        __secret_unlock_keychain || true
+    fi
+fi
