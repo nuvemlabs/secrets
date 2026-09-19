@@ -35,11 +35,14 @@
 #   Initialization
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Support both bash (BASH_SOURCE) and zsh (%x prompt expansion)
+# Support both bash (BASH_SOURCE) and zsh (%x prompt expansion).
+# In bash, `builtin cd` bypasses any user-defined cd function (e.g. one that
+# auto-lists); its output is discarded so only `pwd -P` reaches this command
+# substitution. The zsh branch resolves the path without cd, so needs no guard.
 if [ -n "${ZSH_VERSION:-}" ]; then
     SECRETS_DIR="${${(%):-%x}:A:h}"
 elif [ -n "$BASH_SOURCE" ]; then
-    SECRETS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SECRETS_DIR="$(builtin cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
 else
     # Fallback to a known location
     SECRETS_DIR="${HOME}/.local/lib/secrets"
