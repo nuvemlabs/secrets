@@ -35,7 +35,9 @@ __secret_delete_libsecret() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 __secret_list_libsecret() {
-    # List keys within the current SECRETS_SERVICE namespace
-    secret-tool search --all service "$SECRETS_SERVICE" 2>/dev/null | \
+    # List keys within the current SECRETS_SERVICE namespace.
+    # secret-tool prints the attribute.* lines on stderr and the label/secret
+    # block on stdout, so read stderr only: secret values never enter the pipe.
+    secret-tool search --all service "$SECRETS_SERVICE" 2>&1 >/dev/null | \
         awk -F' = ' '/^attribute\.key = / { print $2 }'
 }
