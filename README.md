@@ -23,8 +23,11 @@ Cross-platform OS-native secret storage for bash and zsh.
 | Channel | Command | Library path to source |
 |---------|---------|------------------------|
 | Homebrew (macOS, Linux) | `brew install nuvemlabs/tap/secrets` | `$(brew --prefix)/lib/secrets/secrets.sh` |
-| Arch (AUR) | `yay -S nuvemlabs-secrets` | `/usr/lib/secrets/secrets.sh` |
+| Arch (PKGBUILD) | `git clone https://github.com/nuvemlabs/secrets.git && cd secrets/packaging/aur && makepkg -si` | `/usr/lib/secrets/secrets.sh` |
 | From source (any) | `git clone https://github.com/nuvemlabs/secrets.git && cd secrets && bash install.sh` | `~/.local/lib/secrets/secrets.sh` |
+
+The Arch package is not on the AUR yet (new AUR accounts are paused); the
+PKGBUILD above is the one that will be published as `nuvemlabs-secrets`.
 
 Then load the library from your shell rc (`~/.bashrc` or `~/.zshrc`), using the path for your channel:
 
