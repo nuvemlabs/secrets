@@ -50,7 +50,12 @@
 - D7 (2026-10-03) backend: `pwsh` selects credmanager only on Windows (msys/cygwin); `powershell.exe` still does (Git Bash, WSL) — assumptions: found by CI, ubuntu runners ship pwsh; Linux/macOS users with PowerShell Core would lose their native store — undo: revert the __secrets_backend hunk
 - D8 (2026-10-03) ci: Linux job runs the libsecret suites against a throwaway gnome-keyring on a private dbus-run-session — assumptions: otherwise the Linux backend is never exercised in CI — undo: drop the Linux keyring steps
 
-### Blocked on the user (outward-facing)
-1. Merge feat/doctor-store-only + feat/packaging into main, push, tag + push v1.1.0
-2. Create GitHub repo nuvemlabs/homebrew-tap, add Formula/secrets.rb, then `brew install nuvemlabs/tap/secrets && brew test secrets`
-3. AUR: account + SSH key, `git clone ssh://aur@aur.archlinux.org/nuvemlabs-secrets.git`, copy PKGBUILD + .SRCINFO, push
+### Published 2026-10-03
+- main + tags v1.1.0, v1.1.1 pushed; GitHub Release v1.1.1; CI green (lint, ubuntu with a throwaway gnome-keyring, macos)
+- Tap github.com/nuvemlabs/homebrew-tap (local ~/repos/homebrew-tap): `brew install nuvemlabs/tap/secrets` installed, `brew test` passed, `brew audit --strict --online` clean
+- AUR: PKGBUILD builds from the v1.1.1 tag with check() passing; local repo ~/repos/aur-nuvemlabs-secrets committed (core.sshCommand uses ~/.ssh/aur_ed25519), not pushed
+
+### Blocked on the user
+1. AUR account: register at aur.archlinux.org with the public key ~/.ssh/aur_ed25519.pub (account creation + captcha are the user's), then: cd ~/repos/aur-nuvemlabs-secrets && git push -u origin master
+2. Local install check of the Arch package needs sudo: yay -S nuvemlabs-secrets (after the push)
+3. Commits pushed this session carry Co-Authored-By trailers, against the user's global rule; removing them needs a force-push of main (history rewrite), the user's call
