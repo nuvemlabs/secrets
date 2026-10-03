@@ -9,7 +9,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: shellcheck
         run: shellcheck -s bash -S warning secrets.sh backends/*.sh bin/secrets-doctor install.sh tests/*.sh
 
@@ -20,7 +20,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install a Secret Service (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -yq libsecret-tools gnome-keyring dbus
