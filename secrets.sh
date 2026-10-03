@@ -59,7 +59,11 @@ fi
 __secrets_backend() {
     if [[ "$OSTYPE" == darwin* ]] && command -v security &>/dev/null; then
         echo "keychain"
-    elif command -v powershell.exe &>/dev/null || command -v pwsh &>/dev/null; then
+    # powershell.exe means Windows (Git Bash, or WSL interop); pwsh alone is
+    # PowerShell Core, also common on Linux/macOS where there is no
+    # Credential Manager, so it only counts on Windows itself.
+    elif command -v powershell.exe &>/dev/null || \
+         { [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* ]] && command -v pwsh &>/dev/null; }; then
         echo "credmanager"
     elif command -v secret-tool &>/dev/null; then
         echo "libsecret"

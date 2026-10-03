@@ -47,6 +47,9 @@
 - Verified: all 7 suites pass; makepkg build from local branch passes check() and ships the expected files; brew style clean except rules that only apply outside a tap; formula install() layout exercised via PREFIX
 - dotfiles 39da759: config/shell/secrets.sh + installers/secrets.sh accept a packaged install
 
+- D7 (2026-10-03) backend: `pwsh` selects credmanager only on Windows (msys/cygwin); `powershell.exe` still does (Git Bash, WSL) — assumptions: found by CI, ubuntu runners ship pwsh; Linux/macOS users with PowerShell Core would lose their native store — undo: revert the __secrets_backend hunk
+- D8 (2026-10-03) ci: Linux job runs the libsecret suites against a throwaway gnome-keyring on a private dbus-run-session — assumptions: otherwise the Linux backend is never exercised in CI — undo: drop the Linux keyring steps
+
 ### Blocked on the user (outward-facing)
 1. Merge feat/doctor-store-only + feat/packaging into main, push, tag + push v1.1.0
 2. Create GitHub repo nuvemlabs/homebrew-tap, add Formula/secrets.rb, then `brew install nuvemlabs/tap/secrets && brew test secrets`

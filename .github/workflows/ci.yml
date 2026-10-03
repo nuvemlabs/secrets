@@ -21,8 +21,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Test suites
+      - name: Install a Secret Service (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -yq libsecret-tools gnome-keyring dbus
+      - name: Write the test runner
         run: |
+          cat > "$RUNNER_TEMP/run-tests.sh" <<'SCRIPT'
+          if command -v gnome-keyring-daemon >/dev/null; then
+            # Throwaway keyring on this private session bus, unlocked with a dummy password
+            export XDG_DATA_HOME="$(mktemp -d)"
+            printf 'ci' | gnome-keyring-daemon --unlock --components=secrets >/dev/null
+          fi
           failed=0
           for t in tests/test_*.sh; do
             echo "::group::$t"
@@ -30,3 +39,10 @@ jobs:
             echo "::endgroup::"
           done
           exit "$failed"
+          SCRIPT
+      - name: Test suites (Linux, private D-Bus session)
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- bash "$RUNNER_TEMP/run-tests.sh"
+      - name: Test suites (macOS)
+        if: runner.os == 'macOS'
+        run: bash "$RUNNER_TEMP/run-tests.sh"

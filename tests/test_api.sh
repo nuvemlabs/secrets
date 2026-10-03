@@ -333,6 +333,27 @@ fi
 echo "-- secret_delete empty args --"
 assert_exit_code "secret_delete with no args returns exit 1" 1 secret_delete
 
+# Test: PowerShell Core on Linux/macOS is not Windows: pwsh alone must not
+# select the Windows Credential Manager backend
+echo "-- pwsh outside Windows --"
+case "$OSTYPE" in
+    msys*|cygwin*) echo "  SKIP: on Windows, pwsh does mean Credential Manager" ;;
+    *)
+        PWSH_STUB="$(mktemp -d)"
+        printf '#!/bin/bash\nexit 0\n' > "$PWSH_STUB/pwsh"
+        chmod +x "$PWSH_STUB/pwsh"
+        detected=$(PATH="$PWSH_STUB:$PATH" bash -c 'source "$1"; echo "$__SECRETS_BACKEND"' _ "$SCRIPT_DIR/../secrets.sh")
+        if [[ "$detected" != "credmanager" ]]; then
+            echo "  PASS: pwsh on $OSTYPE keeps the native backend ($detected)"
+            (( PASS_COUNT++ )) || true
+        else
+            echo "  FAIL: pwsh on $OSTYPE selected credmanager"
+            (( FAIL_COUNT++ )) || true
+        fi
+        rm -rf "$PWSH_STUB"
+        ;;
+esac
+
 # Test: secret_fz -c copies via wl-copy on Wayland (stubbed fzf/wl-copy and a
 # stubbed store, so neither the real clipboard nor real secrets are touched).
 # Skipped where pbcopy exists: it takes precedence on macOS.
