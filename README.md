@@ -1,6 +1,6 @@
 # secrets
 
-Cross-platform OS-native secret storage CLI for bash.
+Cross-platform OS-native secret storage for bash and zsh.
 
 ![macOS](https://img.shields.io/badge/macOS-Keychain-000000?style=flat-square&logo=apple)
 ![Linux](https://img.shields.io/badge/Linux-libsecret-FCC624?style=flat-square&logo=linux&logoColor=black)
@@ -16,19 +16,28 @@ Cross-platform OS-native secret storage CLI for bash.
 - **File fallback** - reads `~/.accessTokens` when no native store is available
 - **Interactive selection** - `fzf`-powered picker with optional preview and clipboard copy
 - **Cross-service search** - query all services with `-a` flag
-- **Zero dependencies** - pure bash, no external packages beyond the OS-native tools
+- **Zero dependencies** - pure shell, nothing beyond the OS-native tools (Linux: `secret-tool`, from `libsecret` or `libsecret-tools`)
+
+## Install
+
+| Channel | Command | Library path to source |
+|---------|---------|------------------------|
+| Homebrew (macOS, Linux) | `brew install nuvemlabs/tap/secrets` | `$(brew --prefix)/lib/secrets/secrets.sh` |
+| Arch (AUR) | `yay -S nuvemlabs-secrets` | `/usr/lib/secrets/secrets.sh` |
+| From source (any) | `git clone https://github.com/nuvemlabs/secrets.git && cd secrets && bash install.sh` | `~/.local/lib/secrets/secrets.sh` |
+
+Then load the library from your shell rc (`~/.bashrc` or `~/.zshrc`), using the path for your channel:
+
+```bash
+source "$HOME/.local/lib/secrets/secrets.sh"
+```
+
+`install.sh` installs per user by default. Packagers stage a system-wide layout with
+`PREFIX=/usr DESTDIR="$pkgdir" bash install.sh` (library in `$PREFIX/lib/secrets`, CLI in `$PREFIX/bin`).
 
 ## Quick Start
 
 ```bash
-# Install
-git clone https://github.com/nuvemlabs/secrets.git
-cd secrets && bash install.sh
-
-# Add to your shell rc
-echo 'source "$HOME/.local/lib/secrets/secrets.sh"' >> ~/.bashrc  # or ~/.zshrc
-
-# Use it
 secret_set MY_API_KEY "sk-abc123"
 secret MY_API_KEY         # prints: sk-abc123
 secret_list               # lists all keys in current service
@@ -44,7 +53,7 @@ secret_delete MY_API_KEY
 | `secret_set KEY VALUE` | Store a secret in the native store |
 | `secret_delete KEY` | Remove a secret |
 | `secret_list` | List keys in the current service |
-| `secret_list -a` | List all keys across all services |
+| `secret_list -a` | List all keys across all services as `service:key` (keychain, credmanager, file; libsecret cannot enumerate across services and says so) |
 | `secret_fz` | Interactive fzf selection |
 | `secret_fz -a` | Interactive selection across all services |
 | `secret_fz -p` | Interactive selection with value preview |
@@ -57,7 +66,7 @@ All commands accept `-h` / `--help` for usage details.
 
 ## CLI Tools
 
-Installed to `~/.local/bin` by `install.sh` (ensure it is on your PATH):
+Installed next to the library: `~/.local/bin` from source, `/usr/bin` or the Homebrew prefix from a package.
 
 | Tool | Description |
 |------|-------------|
@@ -70,6 +79,8 @@ Installed to `~/.local/bin` by `install.sh` (ensure it is on your PATH):
 | `SECRETS_SERVICE` | `secrets` | Namespace for stored secrets (acts as service/application identifier) |
 | `SECRETS_FILE_PATH` | `~/.accessTokens` | Override the file fallback path |
 | `SECRETS_POWERSHELL` | `powershell.exe` | Override the PowerShell binary (Windows only) |
+| `PREFIX` | (unset) | `install.sh`: install to `$PREFIX/lib/secrets` and `$PREFIX/bin` instead of `~/.local` |
+| `DESTDIR` | (unset) | `install.sh`: staging root prepended to every path (package builds) |
 | `SECRETS_INSTALL_DIR` | `~/.local/lib/secrets` | Override install location (used by `install.sh`) |
 | `SECRETS_BIN_DIR` | `~/.local/bin` | Override CLI tools install location (used by `install.sh`) |
 | `SECRETS_EXPORTS_FILE` | (unset) | Shell file with `export KEY="$(secret KEY)"` lines, read by `secrets-doctor` |
@@ -103,6 +114,16 @@ source secrets.sh
 Backend detection runs once at source time. The `secret` command queries the native backend first and falls back to the file backend if no value is found.
 
 The file backend (`~/.accessTokens`) is always loaded alongside the native backend. This lets you keep legacy tokens in a flat file while storing new secrets in the OS-native store.
+
+## Development
+
+```bash
+for t in tests/test_*.sh; do bash "$t" || echo "FAILED: $t"; done
+```
+
+The keychain, libsecret and credmanager suites use a throwaway service namespace in the real
+store and skip on platforms without it; the file, doctor and install suites are hermetic.
+Packaging sources live in `packaging/` (AUR `PKGBUILD` + `.SRCINFO`, Homebrew formula).
 
 ## License
 

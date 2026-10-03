@@ -1,0 +1,16 @@
+pkgbase = nuvemlabs-secrets
+	pkgdesc = OS-native secret storage for bash and zsh (libsecret, macOS Keychain, Windows Credential Manager)
+	pkgver = 1.1.0
+	pkgrel = 1
+	url = https://github.com/nuvemlabs/secrets
+	arch = any
+	license = MIT
+	makedepends = git
+	depends = bash
+	depends = libsecret
+	optdepends = fzf: interactive picker (secret_fz)
+	optdepends = xclip: copy to clipboard (secret_fz -c)
+	source = nuvemlabs-secrets::git+https://github.com/nuvemlabs/secrets.git#tag=v1.1.0
+	sha256sums = SKIP
+
+pkgname = nuvemlabs-secrets
