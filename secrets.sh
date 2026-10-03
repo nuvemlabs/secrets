@@ -40,8 +40,9 @@
 # auto-lists); its output is discarded so only `pwd -P` reaches this command
 # substitution. The zsh branch resolves the path without cd, so needs no guard.
 if [ -n "${ZSH_VERSION:-}" ]; then
+    # shellcheck disable=SC2296,SC2298  # zsh-only expansion, never run by bash
     SECRETS_DIR="${${(%):-%x}:A:h}"
-elif [ -n "$BASH_SOURCE" ]; then
+elif [ -n "${BASH_SOURCE[0]:-}" ]; then
     SECRETS_DIR="$(builtin cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
 else
     # Fallback to a known location

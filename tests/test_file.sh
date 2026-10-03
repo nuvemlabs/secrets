@@ -19,6 +19,7 @@ FAIL_COUNT=0
 
 # Create a temp file with test data
 TEST_FILE="$(mktemp)"
+# shellcheck disable=SC2034  # read by the file backend
 SECRETS_FILE_PATH="$TEST_FILE"
 
 cleanup() {

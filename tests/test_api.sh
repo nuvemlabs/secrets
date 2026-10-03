@@ -345,6 +345,7 @@ else
     printf '#!/bin/bash\ncat > "%s/clipboard"\n' "$FZ_STUB" > "$FZ_STUB/wl-copy"
     chmod +x "$FZ_STUB/fzf" "$FZ_STUB/wl-copy"
     fz_out=$(
+        # shellcheck disable=SC2034  # read by secret_fz
         PATH="$FZ_STUB:$PATH" WAYLAND_DISPLAY=wayland-test
         secret_list() { echo "FZ_KEY"; }
         secret() { printf 'fz-value'; }
