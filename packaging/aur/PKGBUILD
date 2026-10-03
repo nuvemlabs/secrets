@@ -8,7 +8,8 @@ url="https://github.com/nuvemlabs/secrets"
 license=('MIT')
 depends=('bash' 'libsecret' 'glib2')
 optdepends=('fzf: interactive picker (secret_fz)'
-            'xclip: copy to clipboard (secret_fz -c)')
+            'wl-clipboard: copy to clipboard on Wayland (secret_fz -c)'
+            'xclip: copy to clipboard on X11 (secret_fz -c)')
 makedepends=('git')
 source=("$pkgname::git+$url.git#tag=v$pkgver")
 sha256sums=('SKIP')

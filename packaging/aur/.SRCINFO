@@ -10,7 +10,8 @@ pkgbase = nuvemlabs-secrets
 	depends = libsecret
 	depends = glib2
 	optdepends = fzf: interactive picker (secret_fz)
-	optdepends = xclip: copy to clipboard (secret_fz -c)
+	optdepends = wl-clipboard: copy to clipboard on Wayland (secret_fz -c)
+	optdepends = xclip: copy to clipboard on X11 (secret_fz -c)
 	source = nuvemlabs-secrets::git+https://github.com/nuvemlabs/secrets.git#tag=v1.1.1
 	sha256sums = SKIP
 

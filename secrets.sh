@@ -412,6 +412,9 @@ EOF
         if [[ "$copy" == true ]] && command -v pbcopy &>/dev/null; then
             echo -n "$value" | pbcopy
             echo "Copied to clipboard: $selected"
+        elif [[ "$copy" == true && -n "${WAYLAND_DISPLAY:-}" ]] && command -v wl-copy &>/dev/null; then
+            printf '%s' "$value" | wl-copy
+            echo "Copied to clipboard: $selected"
         elif [[ "$copy" == true ]] && command -v xclip &>/dev/null; then
             echo -n "$value" | xclip -selection clipboard
             echo "Copied to clipboard: $selected"

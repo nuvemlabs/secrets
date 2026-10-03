@@ -333,6 +333,28 @@ fi
 echo "-- secret_delete empty args --"
 assert_exit_code "secret_delete with no args returns exit 1" 1 secret_delete
 
+# Test: secret_fz -c copies via wl-copy on Wayland (stubbed fzf/wl-copy and a
+# stubbed store, so neither the real clipboard nor real secrets are touched).
+# Skipped where pbcopy exists: it takes precedence on macOS.
+echo "-- secret_fz -c on Wayland --"
+if command -v pbcopy &>/dev/null; then
+    echo "  SKIP: pbcopy present (macOS clipboard wins)"
+else
+    FZ_STUB="$(mktemp -d)"
+    printf '#!/bin/bash\nhead -n1\n' > "$FZ_STUB/fzf"
+    printf '#!/bin/bash\ncat > "%s/clipboard"\n' "$FZ_STUB" > "$FZ_STUB/wl-copy"
+    chmod +x "$FZ_STUB/fzf" "$FZ_STUB/wl-copy"
+    fz_out=$(
+        PATH="$FZ_STUB:$PATH" WAYLAND_DISPLAY=wayland-test
+        secret_list() { echo "FZ_KEY"; }
+        secret() { printf 'fz-value'; }
+        secret_fz -c
+    )
+    assert_contains "secret_fz -c reports the copy" "Copied to clipboard: FZ_KEY" "$fz_out"
+    assert_eq "secret_fz -c puts the value on the Wayland clipboard" "fz-value" "$(cat "$FZ_STUB/clipboard" 2>/dev/null)"
+    rm -rf "$FZ_STUB"
+fi
+
 # ─────────────────────────────────────────────────────────────────────────────
 #   Results
 # ─────────────────────────────────────────────────────────────────────────────

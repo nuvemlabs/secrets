@@ -57,7 +57,7 @@ secret_delete MY_API_KEY
 | `secret_fz` | Interactive fzf selection |
 | `secret_fz -a` | Interactive selection across all services |
 | `secret_fz -p` | Interactive selection with value preview |
-| `secret_fz -c` | Select and copy value to clipboard |
+| `secret_fz -c` | Select and copy value to clipboard (`pbcopy`, `wl-copy` on Wayland, `xclip`, `clip.exe`) |
 | `secret_unlock` | Unlock a locked macOS login keychain from the terminal (keychain backend only; `security` prompts on the TTY). `secret` points here when it exits 2 with "keychain is locked" |
 
 **Aliases:** `sl` for `secret_list`, `sfz` for `secret_fz`
