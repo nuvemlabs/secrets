@@ -1,26 +1,35 @@
 #!/bin/bash
-# install.sh - Install nuvemlabs/secrets to ~/.local/lib/secrets/
+# install.sh - Install nuvemlabs/secrets
+#
+# Per-user (default):  ~/.local/lib/secrets + ~/.local/bin
+# Packaged:            PREFIX=/usr DESTDIR="$pkgdir" ./install.sh
+#                      -> $DESTDIR$PREFIX/lib/secrets + $DESTDIR$PREFIX/bin
+# SECRETS_INSTALL_DIR / SECRETS_BIN_DIR override either layout.
 set -euo pipefail
 
-INSTALL_DIR="${SECRETS_INSTALL_DIR:-$HOME/.local/lib/secrets}"
-BIN_DIR="${SECRETS_BIN_DIR:-$HOME/.local/bin}"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "[secrets] Installing to $INSTALL_DIR"
+if [[ -n "${PREFIX:-}" ]]; then
+    DEFAULT_LIB_DIR="$PREFIX/lib/secrets"
+    DEFAULT_BIN_DIR="$PREFIX/bin"
+else
+    DEFAULT_LIB_DIR="$HOME/.local/lib/secrets"
+    DEFAULT_BIN_DIR="$HOME/.local/bin"
+fi
 
-mkdir -p "$INSTALL_DIR/backends"
+# Final (runtime) locations; DESTDIR only stages them for a package build
+INSTALL_DIR="${SECRETS_INSTALL_DIR:-$DEFAULT_LIB_DIR}"
+BIN_DIR="${SECRETS_BIN_DIR:-$DEFAULT_BIN_DIR}"
+DESTDIR="${DESTDIR:-}"
 
-cp "$SOURCE_DIR/secrets.sh" "$INSTALL_DIR/"
-cp "$SOURCE_DIR/backends/"*.sh "$INSTALL_DIR/backends/"
+echo "[secrets] Installing library to $DESTDIR$INSTALL_DIR"
+install -d "$DESTDIR$INSTALL_DIR/backends"
+install -m 644 "$SOURCE_DIR/secrets.sh" "$DESTDIR$INSTALL_DIR/"
+install -m 644 "$SOURCE_DIR/backends/"*.sh "$DESTDIR$INSTALL_DIR/backends/"
 
-chmod +x "$INSTALL_DIR/secrets.sh"
-
-echo "[secrets] Installing CLI tools to $BIN_DIR"
-
-mkdir -p "$BIN_DIR"
-
-cp "$SOURCE_DIR/bin/"* "$BIN_DIR/"
-chmod +x "$BIN_DIR/secrets-doctor"
+echo "[secrets] Installing CLI tools to $DESTDIR$BIN_DIR"
+install -d "$DESTDIR$BIN_DIR"
+install -m 755 "$SOURCE_DIR/bin/"* "$DESTDIR$BIN_DIR/"
 
 echo "[secrets] Installed successfully"
 echo ""
