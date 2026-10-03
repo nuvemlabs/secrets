@@ -68,7 +68,7 @@ secret() {
         CTRLKEY)  printf 'ab\ncd' ;;
     esac
 }
-secret_list() { printf 'GOODKEY\nEMPTYKEY\nCTRLKEY\nORPHANKEY\n'; }
+secret_list() { printf 'GOODKEY\nEMPTYKEY\nCTRLKEY\nORPHANKEY\nkebab-key\n'; }
 EOF
 
 cat > "$TMPDIR_TEST/stub-exports.sh" << 'EOF'
@@ -180,6 +180,19 @@ assert_eq "locked keychain --probe exits 1" "1" "$rc"
 assert_contains "locked keychain --probe still reports locked" "$out" "locked"
 assert_not_contains "locked keychain --probe never reads a value" "$out" "$SECRET_VALUE"
 assert_eq "locked keychain --probe never calls secret" "absent" "$([[ -e "$TMPDIR_TEST/secret-called" ]] && echo present || echo absent)"
+
+# --store-only: store presence decides, ENV/EXPORTS are n/a
+out="$(run_doctor --store-only ORPHANKEY)"; rc=$?
+assert_eq "store-only present key exits 0" "0" "$rc"
+assert_not_contains "store-only never reports ENV MISSING" "$out" "MISSING"
+out="$(run_doctor --store-only NOSUCHKEY)" && rc=0 || rc=$?
+assert_eq "store-only missing key exits 1" "1" "$rc"
+assert_contains "store-only missing key reported" "$out" "MISSING"
+
+# Keys that cannot be shell variables (kebab-case wallet keys) do not crash
+out="$(run_doctor kebab-key)" && rc=0 || rc=$?
+assert_not_contains "kebab key: no bash indirection error" "$out" "invalid variable name"
+assert_contains "kebab key STORE ok" "$out" "ok"
 
 # The doctor never lets the library prompt, whatever the caller's shell set
 SECRETS_AUTO_UNLOCK=1 run_doctor_locked GOODKEY >/dev/null 2>&1 || true
