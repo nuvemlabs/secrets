@@ -1,7 +1,7 @@
 class Secrets < Formula
   desc "OS-native secret storage for bash and zsh (Keychain, libsecret)"
   homepage "https://github.com/nuvemlabs/secrets"
-  url "https://github.com/nuvemlabs/secrets.git", tag: "v1.1.0"
+  url "https://github.com/nuvemlabs/secrets.git", tag: "v1.1.1"
   license "MIT"
   head "https://github.com/nuvemlabs/secrets.git", branch: "main"
 

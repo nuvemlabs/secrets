@@ -43,12 +43,34 @@ __secret_list_libsecret() {
 }
 
 __secret_list_libsecret_all() {
-    # secret-tool cannot enumerate across services: every search needs at
-    # least one attribute=value pair and there is no wildcard. Say so instead
-    # of printing an empty list that reads as "no secrets".
-    echo "secret_list -a: not supported on the libsecret backend (secret-tool needs a service);" \
-         "list one service with: SECRETS_SERVICE=<name> secret_list" >&2
-    return 1
+    # List entries across ALL services as service:key, the format that
+    # __secret_get_libsecret_any accepts. secret-tool cannot do this (every
+    # search needs an attribute=value pair), so ask the Secret Service over
+    # D-Bus: SearchItems with no attributes returns every item, locked or not,
+    # and only each item's attributes are read, never its secret. gdbus ships
+    # with glib, which libsecret itself depends on. Items from other apps
+    # without a service/key pair are skipped.
+    if ! command -v gdbus &>/dev/null; then
+        echo "secret_list -a: needs gdbus (glib) on the libsecret backend;" \
+             "list one service with: SECRETS_SERVICE=<name> secret_list" >&2
+        return 1
+    fi
+    local dest=org.freedesktop.secrets items item attrs svc key
+    items=$(gdbus call --session --dest "$dest" --object-path /org/freedesktop/secrets \
+        --method org.freedesktop.Secret.Service.SearchItems '@a{ss} {}' 2>/dev/null) || {
+        echo "secret_list -a: Secret Service not reachable on the session bus" >&2
+        return 1
+    }
+    while IFS= read -r item; do
+        attrs=$(gdbus call --session --dest "$dest" --object-path "$item" \
+            --method org.freedesktop.DBus.Properties.Get \
+            org.freedesktop.Secret.Item Attributes 2>/dev/null) || continue
+        svc=$(sed -n "s/.*'service': '\([^']*\)'.*/\1/p" <<<"$attrs")
+        key=$(sed -n "s/.*'key': '\([^']*\)'.*/\1/p" <<<"$attrs")
+        if [[ -n "$svc" && -n "$key" ]]; then
+            echo "$svc:$key"
+        fi
+    done < <(grep -o "'/org/freedesktop/secrets/[^']*'" <<<"$items" | tr -d "'") | sort -u
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

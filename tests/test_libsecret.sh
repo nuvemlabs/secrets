@@ -116,17 +116,23 @@ else
     (( FAIL_COUNT++ )) || true
 fi
 
-# Test: list across all services is reported as unsupported, not empty
+# Test: list across all services uses service:key, the format get_any accepts
 echo "-- list all / get any --"
-rc=0
-err=$(__secret_list_libsecret_all 2>&1 >/dev/null) || rc=$?
-assert_eq "list all exits 1 (unsupported)" "1" "$rc"
-if [[ "$err" == *"not supported"* ]]; then
-    echo "  PASS: list all explains why"
+list_all_output=$(__secret_list_libsecret_all)
+if grep -qx "$SECRETS_SERVICE:test-list-a" <<<"$list_all_output" && \
+   grep -qx "$SECRETS_SERVICE:test-list-b" <<<"$list_all_output"; then
+    echo "  PASS: list all contains service:key entries"
     (( PASS_COUNT++ )) || true
 else
-    echo "  FAIL: list all gave no reason (stderr: $err)"
+    echo "  FAIL: list all missing '$SECRETS_SERVICE:test-list-a/b'"
     (( FAIL_COUNT++ )) || true
+fi
+if grep -q "val-a" <<<"$list_all_output"; then
+    echo "  FAIL: list all leaked a secret value"
+    (( FAIL_COUNT++ )) || true
+else
+    echo "  PASS: list all prints no values"
+    (( PASS_COUNT++ )) || true
 fi
 result=$(__secret_get_libsecret_any "$SECRETS_SERVICE:test-list-a")
 assert_eq "get any by service:key" "val-a" "$result"

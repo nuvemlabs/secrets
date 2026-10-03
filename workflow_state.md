@@ -36,7 +36,7 @@
 - D2 (2026-10-03) packaging: Homebrew via own tap `nuvemlabs/homebrew-tap`, formula `secrets` — assumptions: homebrew-core wants notability first; the tap namespaces the name — undo: drop packaging/homebrew
 - D3 (2026-10-03) packaging: git tag sources (`#tag=v$pkgver`, brew `tag:`) instead of tarball + sha256 — assumptions: no hash exists until the tag is pushed — undo: switch to the release tarball and add its sha256
 - D4 (2026-10-03) packaging: Linux package depends on `libsecret` (not optional) — assumptions: without secret-tool the library is read-only — undo: move it to optdepends
-- D5 (2026-10-03) libsecret: `secret_list -a` errors out instead of a D-Bus enumeration — assumptions: pre-existing bug, not a packaging blocker; busctl walk is doable but collection names vary — undo: implement __secret_list_libsecret_all over org.freedesktop.Secret (busctl)
+- D5 (2026-10-03) libsecret: `secret_list -a` enumerates over D-Bus with gdbus (SearchItems {} + per-item Attributes; never reads secrets), shipped as v1.1.1 — assumptions: user wants every feature working, not a clear error; gdbus comes with glib, a libsecret dependency — undo: revert fix/libsecret-list-all
 - D6 (2026-10-03) packaging: Ubuntu PPA / Fedora COPR deferred — assumptions: user asked for brew + AUR first
 
 ### Log

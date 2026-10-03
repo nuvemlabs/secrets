@@ -53,7 +53,7 @@ secret_delete MY_API_KEY
 | `secret_set KEY VALUE` | Store a secret in the native store |
 | `secret_delete KEY` | Remove a secret |
 | `secret_list` | List keys in the current service |
-| `secret_list -a` | List all keys across all services as `service:key` (keychain, credmanager, file; libsecret cannot enumerate across services and says so) |
+| `secret_list -a` | List all keys across all services as `service:key` (libsecret: via the Secret Service D-Bus API, needs `gdbus`) |
 | `secret_fz` | Interactive fzf selection |
 | `secret_fz -a` | Interactive selection across all services |
 | `secret_fz -p` | Interactive selection with value preview |
