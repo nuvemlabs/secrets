@@ -198,6 +198,18 @@ assert_contains "kebab key STORE ok" "$out" "ok"
 SECRETS_AUTO_UNLOCK=1 run_doctor_locked GOODKEY >/dev/null 2>&1 || true
 assert_eq "doctor sources the library with auto-unlock off" "0" "$(cat "$TMPDIR_TEST/auto-unlock-seen")"
 
+# A packaged install (<prefix>/bin + <prefix>/lib/secrets, as in /usr or a
+# Homebrew prefix) finds its library without SECRETS_LIB or a ~/.local copy
+PREFIX_TEST="$TMPDIR_TEST/prefix"
+mkdir -p "$PREFIX_TEST/bin" "$PREFIX_TEST/lib/secrets"
+cp "$DOCTOR" "$PREFIX_TEST/bin/secrets-doctor"
+cp "$TMPDIR_TEST/stub-lib.sh" "$PREFIX_TEST/lib/secrets/secrets.sh"
+out="$(HOME="$TMPDIR_TEST/empty-home" SECRETS_EXPORTS_FILE="$TMPDIR_TEST/stub-exports.sh" \
+    GOODKEY="$SECRET_VALUE" "$PREFIX_TEST/bin/secrets-doctor" GOODKEY 2>&1)" && rc=0 || rc=$?
+assert_not_contains "packaged layout: library found" "$out" "library not found"
+assert_eq "packaged layout: GOODKEY chain intact" "0" "$rc"
+assert_not_contains "packaged layout: store checked" "$out" "unknown"
+
 # ─────────────────────────────────────────────────────────────────────────────
 #   Summary
 # ─────────────────────────────────────────────────────────────────────────────
