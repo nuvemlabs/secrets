@@ -41,3 +41,26 @@ __secret_list_libsecret() {
     secret-tool search --all service "$SECRETS_SERVICE" 2>&1 >/dev/null | \
         awk -F' = ' '/^attribute\.key = / { print $2 }'
 }
+
+__secret_list_libsecret_all() {
+    # secret-tool cannot enumerate across services: every search needs at
+    # least one attribute=value pair and there is no wildcard. Say so instead
+    # of printing an empty list that reads as "no secrets".
+    echo "secret_list -a: not supported on the libsecret backend (secret-tool needs a service);" \
+         "list one service with: SECRETS_SERVICE=<name> secret_list" >&2
+    return 1
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#   Cross-Service Lookup
+# ─────────────────────────────────────────────────────────────────────────────
+
+__secret_get_libsecret_any() {
+    # Accepts "service:key" (as printed by __secret_list_libsecret_all) or a
+    # bare key, which matches that key in any service.
+    local key="$1"
+    if [[ "$key" == *:* ]]; then
+        secret-tool lookup service "${key%:*}" key "${key##*:}" 2>/dev/null && return 0
+    fi
+    secret-tool lookup key "$key" 2>/dev/null
+}

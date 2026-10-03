@@ -116,6 +116,23 @@ else
     (( FAIL_COUNT++ )) || true
 fi
 
+# Test: list across all services is reported as unsupported, not empty
+echo "-- list all / get any --"
+rc=0
+err=$(__secret_list_libsecret_all 2>&1 >/dev/null) || rc=$?
+assert_eq "list all exits 1 (unsupported)" "1" "$rc"
+if [[ "$err" == *"not supported"* ]]; then
+    echo "  PASS: list all explains why"
+    (( PASS_COUNT++ )) || true
+else
+    echo "  FAIL: list all gave no reason (stderr: $err)"
+    (( FAIL_COUNT++ )) || true
+fi
+result=$(__secret_get_libsecret_any "$SECRETS_SERVICE:test-list-a")
+assert_eq "get any by service:key" "val-a" "$result"
+result=$(__secret_get_libsecret_any "test-list-b")
+assert_eq "get any by bare key" "val-b" "$result"
+
 # Test: delete secret
 echo "-- delete --"
 register_key "test-delete"

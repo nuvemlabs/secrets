@@ -137,8 +137,7 @@ EOF
                 value=$(__secret_get_credmanager "$key")
                 ;;
             libsecret)
-                # Search without service filter
-                value=$(secret-tool lookup key "$key" 2>/dev/null)
+                value=$(__secret_get_libsecret_any "$key")
                 ;;
         esac
     else
@@ -324,9 +323,7 @@ EOF
                 __secret_list_credmanager_all
                 ;;
             libsecret)
-                # List all libsecret entries
-                secret-tool search --all 2>/dev/null | \
-                    awk -F' = ' '/^attribute\./ { print $1 "=" $2 }' | sort -u
+                __secret_list_libsecret_all
                 ;;
             file)
                 __secret_list_file
