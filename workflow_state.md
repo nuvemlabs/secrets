@@ -28,3 +28,26 @@
 - install.sh: installs bin/ tools to ~/.local/bin (SECRETS_BIN_DIR override), chmod +x.
 - tests/test_doctor.sh: 20 assertions incl. leak-proofing (no value on stdout/stderr/bash -x).
 - README.md: CLI Tools section + new config vars.
+
+## 2026-10-03 — Packaging for AUR + Homebrew (branch feat/packaging, on top of feat/doctor-store-only)
+
+### Decisions
+- D1 (2026-10-03) packaging: AUR package name `nuvemlabs-secrets`, not `secrets` — assumptions: "secrets" is too generic for a shared namespace (free today on AUR and homebrew-core) — undo: rename pkgname in PKGBUILD + README before the first AUR push
+- D2 (2026-10-03) packaging: Homebrew via own tap `nuvemlabs/homebrew-tap`, formula `secrets` — assumptions: homebrew-core wants notability first; the tap namespaces the name — undo: drop packaging/homebrew
+- D3 (2026-10-03) packaging: git tag sources (`#tag=v$pkgver`, brew `tag:`) instead of tarball + sha256 — assumptions: no hash exists until the tag is pushed — undo: switch to the release tarball and add its sha256
+- D4 (2026-10-03) packaging: Linux package depends on `libsecret` (not optional) — assumptions: without secret-tool the library is read-only — undo: move it to optdepends
+- D5 (2026-10-03) libsecret: `secret_list -a` errors out instead of a D-Bus enumeration — assumptions: pre-existing bug, not a packaging blocker; busctl walk is doable but collection names vary — undo: implement __secret_list_libsecret_all over org.freedesktop.Secret (busctl)
+- D6 (2026-10-03) packaging: Ubuntu PPA / Fedora COPR deferred — assumptions: user asked for brew + AUR first
+
+### Log
+- acae554 libsecret `sl -a` fails loudly (was always empty: secret-tool needs an attribute=value pair)
+- f8ca0b7 doctor finds <prefix>/lib/secrets; --help no longer tied to fixed line numbers
+- 7599715 install.sh PREFIX/DESTDIR + tests/test_install.sh (hermetic)
+- e74ca4d packaging/aur (PKGBUILD, .SRCINFO), packaging/homebrew/secrets.rb, README install channels
+- Verified: all 7 suites pass; makepkg build from local branch passes check() and ships the expected files; brew style clean except rules that only apply outside a tap; formula install() layout exercised via PREFIX
+- dotfiles 39da759: config/shell/secrets.sh + installers/secrets.sh accept a packaged install
+
+### Blocked on the user (outward-facing)
+1. Merge feat/doctor-store-only + feat/packaging into main, push, tag + push v1.1.0
+2. Create GitHub repo nuvemlabs/homebrew-tap, add Formula/secrets.rb, then `brew install nuvemlabs/tap/secrets && brew test secrets`
+3. AUR: account + SSH key, `git clone ssh://aur@aur.archlinux.org/nuvemlabs-secrets.git`, copy PKGBUILD + .SRCINFO, push
