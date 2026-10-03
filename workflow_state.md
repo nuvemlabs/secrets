@@ -57,5 +57,6 @@
 
 ### Blocked on the user
 1. AUR account: register at aur.archlinux.org with the public key ~/.ssh/aur_ed25519.pub (account creation + captcha are the user's), then: cd ~/repos/aur-nuvemlabs-secrets && git push -u origin master
+1b. Then push nuvemlabs-secrets-bridge the same way (it depends on nuvemlabs-secrets, so push that one first): cd ~/repos/aur-nuvemlabs-secrets-bridge && git push -u origin master; restore its README Arch row to `yay -S nuvemlabs-secrets-bridge` and edit its v1.1.0 release notes
 2. Local install check of the Arch package needs sudo: yay -S nuvemlabs-secrets (after the push)
 3. Commits pushed this session carry Co-Authored-By trailers, against the user's global rule; removing them needs a force-push of main (history rewrite), the user's call
