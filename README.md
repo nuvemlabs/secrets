@@ -41,27 +41,33 @@ source "$HOME/.local/lib/secrets/secrets.sh"
 ## Quick Start
 
 ```bash
-secret_set MY_API_KEY "sk-abc123"
-secret MY_API_KEY         # prints: sk-abc123
-secret_list               # lists all keys in current service
-secret_delete MY_API_KEY
+secret set MY_API_KEY     # prompts for the value, input hidden, nothing in history
+secret get MY_API_KEY     # prints it (short form: secret MY_API_KEY)
+secret list               # lists all keys in current service
+secret delete MY_API_KEY
 ```
 
 ## API Reference
 
+Every command is a verb of `secret`; each verb is also a `secret_<verb>` function
+(`secret_set`, `secret_list`, ...), and `secret KEY` is short for `secret get KEY`.
+A key spelled like a verb (`list`, `rm`, ...) must be read with `secret get <name>`.
+
 | Command | Description |
 |---------|-------------|
-| `secret KEY` | Get a secret value |
-| `secret -a KEY` | Get a secret from any service (cross-service search) |
-| `secret_set KEY VALUE` | Store a secret in the native store |
-| `secret_delete KEY` | Remove a secret |
-| `secret_list` | List keys in the current service |
-| `secret_list -a` | List all keys across all services as `service:key` (libsecret: via the Secret Service D-Bus API, needs `gdbus`) |
-| `secret_fz` | Interactive fzf selection |
-| `secret_fz -a` | Interactive selection across all services |
-| `secret_fz -p` | Interactive selection with value preview |
-| `secret_fz -c` | Select and copy value to clipboard (`pbcopy`, `wl-copy` on Wayland, `xclip`, `clip.exe`) |
-| `secret_unlock` | Unlock a locked macOS login keychain from the terminal (keychain backend only; `security` prompts on the TTY). `secret` points here when it exits 2 with "keychain is locked" |
+| `secret get KEY` | Get a secret value (also `secret KEY`) |
+| `secret get -a KEY` | Get a secret from any service (cross-service search) |
+| `secret set KEY` | Store a secret, value read from stdin: a hidden prompt on a terminal, the first line of a pipe otherwise. Keeps it out of shell history |
+| `secret set KEY VALUE` | Store a secret given on the command line |
+| `secret delete KEY` | Remove a secret (alias `rm`) |
+| `secret list` | List keys in the current service (alias `ls`) |
+| `secret list -a` | List all keys across all services as `service:key` (libsecret: via the Secret Service D-Bus API, needs `gdbus`) |
+| `secret fz` | Interactive fzf selection |
+| `secret fz -a` | Interactive selection across all services |
+| `secret fz -p` | Interactive selection with value preview |
+| `secret fz -c` | Select and copy value to clipboard (`pbcopy`, `wl-copy` on Wayland, `xclip`, `clip.exe`) |
+| `secret unlock` | Unlock a locked macOS login keychain from the terminal (keychain backend only; `security` prompts on the TTY). `secret` points here when it exits 2 with "keychain is locked" |
+| `secret help` | List the commands |
 
 **Aliases:** `sl` for `secret_list`, `sfz` for `secret_fz`
 

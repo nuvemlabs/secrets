@@ -231,8 +231,29 @@ else
     # Test: secret_set with empty args returns exit 1
     echo "-- secret_set empty args --"
     assert_exit_code "secret_set with no args returns exit 1" 1 secret_set
-    assert_exit_code "secret_set with key only returns exit 1" 1 secret_set "some-key"
+    assert_exit_code "secret_set with key only and empty stdin returns exit 1" 1 secret_set "some-key" </dev/null
     assert_exit_code "secret_set with empty key returns exit 1" 1 secret_set "" "some-value"
+
+    # Test: secret_set reads VALUE from stdin when it is omitted
+    echo "-- secret_set value from stdin --"
+    register_key "api-test-stdin"
+    printf 'from-stdin\n' | secret_set "api-test-stdin"
+    assert_eq "secret_set without VALUE stores the piped line" "from-stdin" "$(secret "api-test-stdin")"
+
+    # Test: verb form dispatches to the same functions
+    echo "-- secret <verb> --"
+    register_key "api-test-verb"
+    secret set "api-test-verb" "verb-value"
+    assert_eq "secret set then secret get" "verb-value" "$(secret get "api-test-verb")"
+    assert_eq "plain secret KEY still gets" "verb-value" "$(secret "api-test-verb")"
+    assert_contains "secret list shows the key" "api-test-verb" "$(secret list)"
+    assert_contains "secret ls shows the key" "api-test-verb" "$(secret ls)"
+    secret rm "api-test-verb"
+    assert_exit_code "secret rm removed the key" 1 secret get "api-test-verb"
+    register_key "api-test-verb-del"
+    secret set "api-test-verb-del" "x"
+    secret delete "api-test-verb-del"
+    assert_exit_code "secret delete removed the key" 1 secret get "api-test-verb-del"
 
     # Test: secret_delete removes the key
     echo "-- secret_delete --"
@@ -262,7 +283,13 @@ fi
 echo "-- secret --help --"
 help_output=$(secret --help 2>&1)
 assert_contains "secret --help contains Usage" "Usage:" "$help_output"
-assert_contains "secret --help mentions --all" "--all" "$help_output"
+for verb in get set list delete fz unlock; do
+    assert_contains "secret --help lists $verb" "  $verb" "$help_output"
+done
+assert_exit_code "secret with no args returns exit 1" 1 secret
+help_output=$(secret get --help 2>&1)
+assert_contains "secret get --help mentions --all" "--all" "$help_output"
+assert_exit_code "secret get with no key returns exit 1" 1 secret get
 
 # Test: secret_set --help prints usage
 echo "-- secret_set --help --"
@@ -369,7 +396,7 @@ else
         # shellcheck disable=SC2034  # read by secret_fz
         PATH="$FZ_STUB:$PATH" WAYLAND_DISPLAY=wayland-test
         secret_list() { echo "FZ_KEY"; }
-        secret() { printf 'fz-value'; }
+        secret_get() { printf 'fz-value'; }
         secret_fz -c
     )
     assert_contains "secret_fz -c reports the copy" "Copied to clipboard: FZ_KEY" "$fz_out"

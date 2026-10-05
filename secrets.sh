@@ -7,9 +7,11 @@
 # Usage:
 #   source /path/to/secrets.sh
 #
-#   secret KEY              - Get a secret from the current service
+#   secret <verb> ...       - Verb form of the commands below:
+#                             get, set, list|ls, delete|rm, fz, unlock
+#   secret KEY              - Get a secret from the current service (= secret get)
 #   secret -a KEY           - Get a secret from any service (--all)
-#   secret_set KEY VALUE    - Store a secret
+#   secret_set KEY [VALUE]  - Store a secret (no VALUE: read from stdin)
 #   secret_list             - List secrets in current service
 #   secret_list -a          - List ALL secrets across services (--all)
 #   secret_delete KEY       - Remove a secret
@@ -95,7 +97,41 @@ fi
 #   Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
+# `secret <verb> ...` dispatches to the secret_* functions. Anything that is
+# not a verb is a key, so `secret KEY` and `secret -a KEY` keep working; a key
+# literally named like a verb needs `secret get <name>`.
 secret() {
+    case "${1:-}" in
+        get)            shift; secret_get "$@" ;;
+        set)            shift; secret_set "$@" ;;
+        list|ls)        shift; secret_list "$@" ;;
+        delete|rm)      shift; secret_delete "$@" ;;
+        fz)             shift; secret_fz "$@" ;;
+        unlock)         shift; secret_unlock "$@" ;;
+        help|-h|--help) __secret_usage ;;
+        "")             __secret_usage >&2; return 1 ;;
+        *)              secret_get "$@" ;;
+    esac
+}
+
+__secret_usage() {
+    cat <<EOF
+Usage: secret <command> [args]
+
+Commands:
+  get [-a] KEY        Print a secret (also: secret KEY)
+  set KEY [VALUE]     Store a secret; without VALUE it is read from stdin
+                      (hidden prompt on a terminal), keeping it out of history
+  list [-a]           List keys (alias: ls)
+  delete KEY          Remove a secret (alias: rm)
+  fz [-a|-p|-c]       Pick a secret with fzf
+  unlock              Unlock a locked macOS login keychain
+
+Service: $SECRETS_SERVICE. Run 'secret <command> -h' for a command's options.
+EOF
+}
+
+secret_get() {
     local all_services=false
     local key=""
 
@@ -104,7 +140,7 @@ secret() {
         case "$1" in
             -h|--help)
                 cat <<EOF
-Usage: secret [-a|--all] KEY
+Usage: secret get [-a|--all] KEY   (or: secret [-a|--all] KEY)
 
 Get a secret value from the secret store.
 
@@ -123,7 +159,7 @@ EOF
         esac
     done
 
-    [[ -z "$key" ]] && { echo "Usage: secret [-a|--all] KEY (use -h for help)" >&2; return 1; }
+    [[ -z "$key" ]] && { echo "Usage: secret get [-a|--all] KEY (use -h for help)" >&2; return 1; }
 
     local backend="$__SECRETS_BACKEND"
     local value=""
@@ -189,19 +225,31 @@ EOF
 secret_set() {
     if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
         cat <<EOF
-Usage: secret_set KEY VALUE
+Usage: secret set KEY [VALUE]   (or: secret_set KEY [VALUE])
 
 Store a secret in the native secret store ($SECRETS_SERVICE service).
+Without VALUE it is read from stdin: a hidden prompt on a terminal, the
+first line of a pipe otherwise. Either way it stays out of shell history.
 
 Examples:
-  secret_set OPENAI_API_KEY "sk-..."
-  secret_set MY_TOKEN "abc123"
+  secret set OPENAI_API_KEY               # prompts, input hidden
+  pass show openai | secret set OPENAI_API_KEY
+  secret set MY_TOKEN "abc123"
 EOF
         return 0
     fi
 
     local key="${1:-}"
     local value="${2:-}"
+    if [[ -n "$key" && $# -lt 2 ]]; then
+        if [[ -t 0 ]]; then
+            printf 'Value for %s: ' "$key" >&2
+            IFS= read -rs value
+            printf '\n' >&2
+        else
+            IFS= read -r value || true
+        fi
+    fi
     [[ -z "$key" || -z "$value" ]] && { echo "Usage: secret_set KEY VALUE (use -h for help)" >&2; return 1; }
 
     local backend="$__SECRETS_BACKEND"
@@ -400,7 +448,7 @@ EOF
     local fzf_opts=(--header="Select secret (Enter=print, Ctrl-C=cancel)")
     if [[ "$preview" == true ]]; then
         fzf_opts+=(
-            --preview="source '$SECRETS_DIR/secrets.sh' 2>/dev/null; secret $all_flag '{}' 2>/dev/null || echo '[Access denied or not found]'"
+            --preview="source '$SECRETS_DIR/secrets.sh' 2>/dev/null; secret_get $all_flag '{}' 2>/dev/null || echo '[Access denied or not found]'"
             --preview-window=down:3:wrap
         )
     fi
@@ -411,7 +459,7 @@ EOF
     [[ -z "$selected" ]] && return 0
 
     local value
-    value=$(secret $all_flag "$selected" 2>/dev/null)
+    value=$(secret_get $all_flag "$selected" 2>/dev/null)
 
     if [[ -n "$value" ]]; then
         if [[ "$copy" == true ]] && command -v pbcopy &>/dev/null; then
