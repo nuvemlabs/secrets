@@ -60,3 +60,9 @@
 1b. Then push nuvemlabs-secrets-bridge the same way (it depends on nuvemlabs-secrets, so push that one first): cd ~/repos/aur-nuvemlabs-secrets-bridge && git push -u origin master; restore its README Arch row to `yay -S nuvemlabs-secrets-bridge` and edit its v1.1.0 release notes
 2. Local install check of the Arch package needs sudo: yay -S nuvemlabs-secrets (after the push)
 3. Commits pushed this session carry Co-Authored-By trailers, against the user's global rule; removing them needs a force-push of main (history rewrite), the user's call
+
+## 2026-10-06 — `secret <verb>` (branch feat/secret-verbs)
+
+### Decisions
+- D7 (2026-10-06) api: `secret` dispatches verbs get/set/list|ls/delete|rm/fz/unlock/help; any other first arg is a key, so `secret KEY` stays a get — assumptions: keys are env-style names, never spelled like a lowercase verb (those need `secret get <name>`) — undo: revert 85022e8
+- D8 (2026-10-06) api: `secret set KEY` without VALUE reads it from stdin (hidden prompt on a TTY) — assumptions: keeps values out of shell history; empty input still fails — undo: same revert
