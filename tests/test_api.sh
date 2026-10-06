@@ -282,9 +282,9 @@ fi
 # Test: secret service shows, switches, swaps back and picks (store stubbed)
 echo "-- secret service --"
 svc_out=$(
-    secret_list() { printf 'alpha:K1\nbeta:K2\nalpha:K3\n'; }
+    secret_list() { printf 'alpha:K1\nbeta:K2\nalpha:K3\nbridge:proj:K4\n'; }
     SVC_STUB="$(mktemp -d)"
-    printf '#!/bin/bash\ngrep -x beta\n' > "$SVC_STUB/fzf"
+    printf '#!/bin/bash\ngrep -x bridge:proj\n' > "$SVC_STUB/fzf"
     chmod +x "$SVC_STUB/fzf"
     start="$SECRETS_SERVICE"
     echo "show=$(secret service)"
@@ -293,7 +293,6 @@ svc_out=$(
     echo "exported=$(bash -c 'echo "$SECRETS_SERVICE"')"
     secret service - >/dev/null; echo "swapped=$([[ "$SECRETS_SERVICE" == "$start" ]] && echo start)"
     secret service - >/dev/null; echo "swapped-again=$SECRETS_SERVICE"
-    secret service bad:name >/dev/null 2>&1; echo "colon=$? still=$SECRETS_SERVICE"
     echo "list=$(secret service -l | tr '\n' ' ')"
     PATH="$SVC_STUB:$PATH" secret service -p >/dev/null; echo "picked=$SECRETS_SERVICE"
     rm -rf "$SVC_STUB"
@@ -304,9 +303,8 @@ assert_contains "secret service NAME switches" "switched=other" "$svc_out"
 assert_contains "the switched service is exported to child processes" "exported=other" "$svc_out"
 assert_contains "secret service - swaps back" "swapped=start" "$svc_out"
 assert_contains "secret service - toggles like cd -" "swapped-again=other" "$svc_out"
-assert_contains "a service name with ':' is refused and nothing changes" "colon=1 still=other" "$svc_out"
-assert_contains "secret service -l lists stored services once each" "alpha beta other" "$svc_out"
-assert_contains "secret service -p switches to the picked service" "picked=beta" "$svc_out"
+assert_contains "secret service -l lists stored services once each" "alpha beta bridge:proj other" "$svc_out"
+assert_contains "secret service -p switches to the picked service" "picked=bridge:proj" "$svc_out"
 assert_eq "secret service in a subshell leaves this shell alone" "secrets-test-$$" "$SECRETS_SERVICE"
 
 # Test: secret --help prints usage (works on all backends)

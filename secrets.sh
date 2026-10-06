@@ -174,9 +174,6 @@ EOF
             target="$1" ;;
     esac
 
-    # `secret list -a` prints service:key, so a colon would make the name ambiguous
-    [[ "$target" == *:* ]] && { echo "Service names cannot contain ':'" >&2; return 1; }
-
     if [[ "$target" != "$SECRETS_SERVICE" ]]; then
         __SECRETS_PREV_SERVICE="$SECRETS_SERVICE"
         export SECRETS_SERVICE="$target"
@@ -184,9 +181,11 @@ EOF
     echo "service: $SECRETS_SERVICE"
 }
 
-# Services that hold at least one secret, plus the current one even if empty
+# Services that hold at least one secret, plus the current one even if empty.
+# `secret list -a` prints service:key and service names may themselves hold a
+# colon (secrets-bridge uses secrets-bridge:<project>), so split at the last one.
 __secret_services() {
-    { echo "$SECRETS_SERVICE"; secret_list -a 2>/dev/null | cut -d: -f1; } | sort -u
+    { echo "$SECRETS_SERVICE"; secret_list -a 2>/dev/null | sed 's/:[^:]*$//'; } | sort -u
 }
 
 secret_get() {
