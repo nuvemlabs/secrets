@@ -71,11 +71,31 @@ A key spelled like a verb (`list`, `rm`, ...) must be read with `secret get <nam
 | `secret service NAME` | Switch this shell to service NAME; new shells keep their default |
 | `secret service -` | Swap back to the previous service, like `cd -` |
 | `secret service -p` | Pick a service with fzf from those that hold secrets (`-l` lists them) |
+| `secret backup [-a] [-n]` | Copy secrets to Bitwarden, one folder per service (see Backup) |
+| `secret restore [-a] [-n] [--force]` | Copy secrets back from Bitwarden |
 | `secret help` | List the commands |
 
 **Aliases:** `sl` for `secret_list`, `sfz` for `secret_fz`
 
 All commands accept `-h` / `--help` for usage details.
+
+## Backup (Bitwarden)
+
+The OS store lives on one machine. `secret backup` copies it to Bitwarden and
+`secret restore` brings it back (`bin/secrets-backup push|pull` underneath):
+
+```bash
+export BW_SESSION=$(bw unlock --raw)   # once per shell
+secret backup -n                       # dry run for the current service
+secret backup -a                       # every service
+secret restore -a                      # on a new machine
+```
+
+Each service is a folder under `secrets/` (`SECRETS_BW_FOLDER`), each key a
+login item with the value as its password. Bitwarden is a backup, not a
+backend: `bw` is too slow and needs an unlocked session. Nothing is ever
+deleted on either side; restore keeps a local value that differs unless
+`--force`. Values travel over pipes only, never argv or the terminal.
 
 ## CLI Tools
 

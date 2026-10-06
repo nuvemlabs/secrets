@@ -66,3 +66,6 @@
 ### Decisions
 - D7 (2026-10-06) api: `secret` dispatches verbs get/set/list|ls/delete|rm/fz/unlock/help; any other first arg is a key, so `secret KEY` stays a get — assumptions: keys are env-style names, never spelled like a lowercase verb (those need `secret get <name>`) — undo: revert 85022e8
 - D8 (2026-10-06) api: `secret set KEY` without VALUE reads it from stdin (hidden prompt on a TTY) — assumptions: keeps values out of shell history; empty input still fails — undo: same revert
+- D9 (2026-10-06) api: `secret service [NAME|-|-p|-l]` switches SECRETS_SERVICE per shell; service names may contain ':' (secrets-bridge:<project>), so service:key is split at the last colon — undo: revert 7570738 18f0444
+- D10 (2026-10-06) backup: Bitwarden as backup only (`secrets-backup push|pull`, verbs `secret backup|restore`), never a read backend — assumptions: bw ~1s/call + session unlock is too slow for shell-start exports — undo: drop bin/secrets-backup and the two verbs
+- D11 (2026-10-06) backup: folder `secrets/<service>` per service, login item per key (value = password); no deletes either way; pull keeps differing local values unless --force — undo: same

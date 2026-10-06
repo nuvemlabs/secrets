@@ -109,6 +109,8 @@ secret() {
         fz)             shift; secret_fz "$@" ;;
         unlock)         shift; secret_unlock "$@" ;;
         service)        shift; secret_service "$@" ;;
+        backup)         shift; __secret_backup push "$@" ;;
+        restore)        shift; __secret_backup pull "$@" ;;
         help|-h|--help) __secret_usage ;;
         "")             __secret_usage >&2; return 1 ;;
         *)              secret_get "$@" ;;
@@ -128,6 +130,8 @@ Commands:
   fz [-a|-p|-c]       Pick a secret with fzf
   unlock              Unlock a locked macOS login keychain
   service [NAME|-|-p] Show, switch, swap back to or pick the service
+  backup [-a] [-n]    Copy secrets to Bitwarden, a folder per service
+  restore [-a] [-n]   Copy them back from Bitwarden (--force overwrites)
 
 Service: $SECRETS_SERVICE. Run 'secret <command> -h' for a command's options.
 EOF
@@ -179,6 +183,15 @@ EOF
         export SECRETS_SERVICE="$target"
     fi
     echo "service: $SECRETS_SERVICE"
+}
+
+# The Bitwarden backup is a CLI (bin/secrets-backup): on PATH once installed,
+# next to the library in a checkout.
+__secret_backup() {
+    local cli
+    cli=$(command -v secrets-backup 2>/dev/null) || cli="$SECRETS_DIR/bin/secrets-backup"
+    [[ -x "$cli" ]] || { echo "secrets-backup not found; run install.sh" >&2; return 1; }
+    SECRETS_SERVICE="$SECRETS_SERVICE" "$cli" "$@"
 }
 
 # Services that hold at least one secret, plus the current one even if empty.
