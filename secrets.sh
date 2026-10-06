@@ -108,6 +108,7 @@ secret() {
         delete|rm)      shift; secret_delete "$@" ;;
         fz)             shift; secret_fz "$@" ;;
         unlock)         shift; secret_unlock "$@" ;;
+        service)        shift; secret_service "$@" ;;
         help|-h|--help) __secret_usage ;;
         "")             __secret_usage >&2; return 1 ;;
         *)              secret_get "$@" ;;
@@ -126,9 +127,66 @@ Commands:
   delete KEY          Remove a secret (alias: rm)
   fz [-a|-p|-c]       Pick a secret with fzf
   unlock              Unlock a locked macOS login keychain
+  service [NAME|-|-p] Show, switch, swap back to or pick the service
 
 Service: $SECRETS_SERVICE. Run 'secret <command> -h' for a command's options.
 EOF
+}
+
+# Switches SECRETS_SERVICE for the current shell only, which is why this has
+# to be a function the shell sources, not a CLI. The previous name is kept so
+# `secret service -` can swap back, like `cd -`.
+secret_service() {
+    local target=""
+    case "${1:-}" in
+        -h|--help)
+            cat <<EOF
+Usage: secret service [NAME|-|-p]
+
+Show or change the service (namespace) secrets are read from and saved to.
+The change lasts for this shell only; new shells start on their default.
+
+  secret service          Print the current service
+  secret service NAME     Switch to NAME (it need not exist yet)
+  secret service -        Swap back to the previous service
+  secret service -p       Pick from the services that hold secrets (fzf)
+  secret service -l       List the services that hold secrets
+EOF
+            return 0 ;;
+        "")
+            echo "$SECRETS_SERVICE"
+            return 0 ;;
+        -l|--list)
+            __secret_services
+            return ;;
+        -)
+            [[ -z "${__SECRETS_PREV_SERVICE:-}" ]] && { echo "No previous service in this shell" >&2; return 1; }
+            target="$__SECRETS_PREV_SERVICE" ;;
+        -p|--pick)
+            command -v fzf &>/dev/null || { echo "fzf is required for secret service -p" >&2; return 1; }
+            target=$(__secret_services | fzf --height=40% --reverse \
+                --prompt="service> " --header="current: $SECRETS_SERVICE") || return 130
+            ;;
+        -*)
+            echo "Unknown option: $1. Use -h for help." >&2
+            return 1 ;;
+        *)
+            target="$1" ;;
+    esac
+
+    # `secret list -a` prints service:key, so a colon would make the name ambiguous
+    [[ "$target" == *:* ]] && { echo "Service names cannot contain ':'" >&2; return 1; }
+
+    if [[ "$target" != "$SECRETS_SERVICE" ]]; then
+        __SECRETS_PREV_SERVICE="$SECRETS_SERVICE"
+        export SECRETS_SERVICE="$target"
+    fi
+    echo "service: $SECRETS_SERVICE"
+}
+
+# Services that hold at least one secret, plus the current one even if empty
+__secret_services() {
+    { echo "$SECRETS_SERVICE"; secret_list -a 2>/dev/null | cut -d: -f1; } | sort -u
 }
 
 secret_get() {

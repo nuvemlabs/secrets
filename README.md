@@ -67,6 +67,10 @@ A key spelled like a verb (`list`, `rm`, ...) must be read with `secret get <nam
 | `secret fz -p` | Interactive selection with value preview |
 | `secret fz -c` | Select and copy value to clipboard (`pbcopy`, `wl-copy` on Wayland, `xclip`, `clip.exe`) |
 | `secret unlock` | Unlock a locked macOS login keychain from the terminal (keychain backend only; `security` prompts on the TTY). `secret` points here when it exits 2 with "keychain is locked" |
+| `secret service` | Print the current service (`$SECRETS_SERVICE`) |
+| `secret service NAME` | Switch this shell to service NAME; new shells keep their default |
+| `secret service -` | Swap back to the previous service, like `cd -` |
+| `secret service -p` | Pick a service with fzf from those that hold secrets (`-l` lists them) |
 | `secret help` | List the commands |
 
 **Aliases:** `sl` for `secret_list`, `sfz` for `secret_fz`
