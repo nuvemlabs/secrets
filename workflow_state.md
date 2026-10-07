@@ -50,6 +50,8 @@
 - D7 (2026-10-03) backend: `pwsh` selects credmanager only on Windows (msys/cygwin); `powershell.exe` still does (Git Bash, WSL) — assumptions: found by CI, ubuntu runners ship pwsh; Linux/macOS users with PowerShell Core would lose their native store — undo: revert the __secrets_backend hunk
 - D8 (2026-10-03) ci: Linux job runs the libsecret suites against a throwaway gnome-keyring on a private dbus-run-session — assumptions: otherwise the Linux backend is never exercised in CI — undo: drop the Linux keyring steps
 
+- D9 (2026-10-08) dotfiles: `--secrets` installs via `brew install nuvemlabs/tap/{secrets,secrets-bridge}` when there is no working copy; a working copy in ~/repos still wins (brew ships releases only), no brew falls back to a clone — assumptions: user asked to move from cloning to brew; dev machines run ahead of releases — undo: revert dotfiles 739410a
+
 ### Published 2026-10-03
 - main + tags v1.1.0, v1.1.1 pushed; GitHub Release v1.1.1; CI green (lint, ubuntu with a throwaway gnome-keyring, macos)
 - Tap github.com/nuvemlabs/homebrew-tap (local ~/repos/homebrew-tap): `brew install nuvemlabs/tap/secrets` installed, `brew test` passed, `brew audit --strict --online` clean
