@@ -51,6 +51,7 @@
 - D8 (2026-10-03) ci: Linux job runs the libsecret suites against a throwaway gnome-keyring on a private dbus-run-session — assumptions: otherwise the Linux backend is never exercised in CI — undo: drop the Linux keyring steps
 
 - D9 (2026-10-08) dotfiles: `--secrets` installs via `brew install nuvemlabs/tap/{secrets,secrets-bridge}` when there is no working copy; a working copy in ~/repos still wins (brew ships releases only), no brew falls back to a clone — assumptions: user asked to move from cloning to brew; dev machines run ahead of releases — undo: revert dotfiles 739410a
+- 2026-10-10 follow-up aur-registration-check: https://aur.archlinux.org/register returned HTTP 200 (was 503 on 2026-10-03), so registration is open. AUR repo ready (master 4270cde, unpushed). Status: WAITING ON USER (register with ~/.ssh/aur_ed25519.pub, then say go for the push)
 
 ### Published 2026-10-03
 - main + tags v1.1.0, v1.1.1 pushed; GitHub Release v1.1.1; CI green (lint, ubuntu with a throwaway gnome-keyring, macos)
