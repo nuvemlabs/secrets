@@ -155,8 +155,38 @@ for t in tests/test_*.sh; do bash "$t" || echo "FAILED: $t"; done
 ```
 
 The keychain, libsecret and credmanager suites use a throwaway service namespace in the real
-store and skip on platforms without it; the file, doctor and install suites are hermetic.
+store and skip on platforms without it; the file, doctor, install and AUR watch suites are hermetic.
 Packaging sources live in `packaging/` (AUR `PKGBUILD` + `.SRCINFO`, Homebrew formula).
+
+## AUR registration watch
+
+`scripts/aur-registration-watch` sends one phone alert (ntfy) and one Steward inbox message
+when new AUR accounts can be registered again, so the `nuvemlabs-secrets` packages can be published.
+It is a maintainer tool and is never part of the packages.
+
+What it checks, four times an hour (systemd user timer, `OnCalendar=*:0/15`):
+
+1. The Arch news feed and the aur-general list feed. The closed register page asks visitors not to
+   script retries and points to these two feeds. A new item about AUR registration from Arch staff
+   (any news post, or an aur-general post from an `@archlinux.org` address) is a *lead*.
+2. The register page itself, but only on a lead, once a day as a safety net, or an hour after an
+   unreadable result. It sits behind Anubis, so the script pays the same proof of work a browser
+   does. Then hard rules decide:
+   - **OPEN**: HTTP 200, the new-account form (username, email, captcha, captcha salt), no closed notice.
+   - **CLOSED**: the "registration is temporarily closed" notice (HTTP 200 or 503).
+   - **UNKNOWN**: anything else. It is never reported as open; three in a row send one alert.
+
+The open alert goes out once and is not repeated while registration stays open. State lives in
+`~/.local/state/aur-watch/state.json`.
+
+```bash
+./install.sh --aur-watch                                  # install it and enable the timer
+aur-registration-watch                                    # one run by hand (what the timer does)
+aur-registration-watch --check-page                       # one run that also checks the page now
+systemctl --user list-timers aur-registration-watch.timer # next run
+journalctl --user -u aur-registration-watch               # past runs
+systemctl --user disable --now aur-registration-watch.timer   # stop it
+```
 
 ## License
 
