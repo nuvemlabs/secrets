@@ -73,3 +73,19 @@
 - D9 (2026-10-06) api: `secret service [NAME|-|-p|-l]` switches SECRETS_SERVICE per shell; service names may contain ':' (secrets-bridge:<project>), so service:key is split at the last colon — undo: revert 7570738 18f0444
 - D10 (2026-10-06) backup: Bitwarden as backup only (`secrets-backup push|pull`, verbs `secret backup|restore`), never a read backend — assumptions: bw ~1s/call + session unlock is too slow for shell-start exports — undo: drop bin/secrets-backup and the two verbs
 - D11 (2026-10-06) backup: folder `secrets/<service>` per service, login item per key (value = password); no deletes either way; pull keeps differing local values unless --force — undo: same
+
+## 2026-10-17 — AUR registration watch (card #133, branch steward/133)
+
+Goal: one phone alert + Steward inbox message when AUR account registration opens; checks 4x/hour.
+
+### Decisions
+- D12 (2026-10-17) aur-watch: the 15-min timer polls the Arch news + aur-general RSS, not the register page; the page is fetched only on a staff lead, daily, or 1h after an UNKNOWN — assumptions: the closed page asks "do not script retries against this page" and names those feeds as the announcement channels — undo: set PAGE_CHECK_INTERVAL to 15 min in scripts/aur-registration-watch
+- D13 (2026-10-17) aur-watch: the page check solves Anubis's proof of work (sha256, difficulty capped at 6) like a browser — assumptions: without it every read is the bot-check page (HTTP 200), which is also why the 2026-10-10 "HTTP 200 = open" log entry was wrong — undo: drop fetch_register_page's challenge branch (page then always reads UNKNOWN)
+- D14 (2026-10-17) aur-watch: HTTP 200 with neither form nor closed notice is UNKNOWN, not CLOSED (card said form absent = CLOSED) — assumptions: a layout change must not silently read as closed — undo: classify() returns CLOSED for that case
+- D15 (2026-10-17) aur-watch: Python stdlib only, in scripts/ (never packaged), installed by opt-in `./install.sh --aur-watch` — assumptions: RSS parsing + sha256 PoW are poor fits for bash; python3 is on every target machine — undo: revert the steward/133 commits
+
+### Log
+- Correction to 2026-10-10: register returned 200 because Anubis serves its challenge with 200; past the challenge the page is HTTP 503 "New account registration is temporarily closed" (2026-10-17)
+- tests/test_aur_watch.sh: 48 pass (classify fixtures, alert once/no repeat, retry of a failed alert, leads, baseline, unreadable streaks, install); mutation of the dedupe logic fails 6 asserts; all other suites still pass
+- Live run 2026-10-17: page CLOSED (HTTP 503, closed notice), feeds ok, leads 0, nothing sent
+- Not installed on this machine: the executor run had no permission to write outside the worktree. After merge: `cd ~/repos/secrets && ./install.sh --aur-watch`

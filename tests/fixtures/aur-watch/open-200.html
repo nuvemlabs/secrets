@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!-- Built from aurweb templates/register.html + templates/partials/account_form.html
+     (form_type NewAccount), rendered by hand; the live page was closed when captured. -->
+<html lang="en">
+<head><title>AUR (en) - Register</title></head>
+<body>
+<div id="content">
+  <div class="box">
+    <h2>Register</h2>
+    <p>Use this form to create an account.</p>
+    <form id="edit-profile-form" method="post" action="/register">
+      <fieldset>
+        <input type="hidden" name="Action" value="NewAccount">
+      </fieldset>
+      <fieldset>
+        <p>
+          <label for="id_username">Username:</label>
+          <input id="id_username"
+                 type="text" size="30"
+                 maxlength="16" name="U"
+                 value="">
+          (required)
+        </p>
+        <p>
+          <label for="id_email">Email Address:</label>
+          <input id="id_email" type="email"
+                 size="30" maxlength="254" name="E" value="">
+          (required)
+        </p>
+        <p>
+          <label for="id_ssh">SSH Public Key:</label>
+          <textarea id="id_ssh" name="PK" rows="5" cols="30"></textarea>
+        </p>
+      </fieldset>
+      <fieldset>
+        <legend>
+          To protect the AUR against automated account creation, we kindly ask you to provide the output of the following command:
+          <code>LC_ALL=C pacman -V|sed -r "s#[0-9]+#0123#g"|md5sum|cut -c1-6</code>
+        </legend>
+        <p>
+          <label for="id_captcha">Answer:</label>
+          <input id="id_captcha"
+                 type="text" size="30" maxlength="6" name="captcha">
+          (required)
+          <input type="hidden" name="captcha_salt"
+                 value="aurweb-1760680000">
+        </p>
+      </fieldset>
+      <fieldset>
+        <p>
+          <label></label>
+          <input class="button" type="submit" value="Create"> &nbsp;
+          <input class="button" type="reset" value="Reset">
+        </p>
+      </fieldset>
+    </form>
+  </div>
+</div>
+</body>
+</html>

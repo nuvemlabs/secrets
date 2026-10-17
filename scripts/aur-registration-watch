@@ -1,0 +1,393 @@
+#!/usr/bin/env python3
+"""aur-registration-watch - tell Daniel once when AUR account registration opens.
+
+Two stages, because the closed page asks visitors not to script retries
+against it and points to aur-general and the Arch news feed instead:
+
+1. Every run reads the Arch news feed and the aur-general list feed (both
+   RSS, built to be polled). A new item is a lead when it is about AUR
+   registration and comes from Arch staff: any Arch news post, or an
+   aur-general post from an @archlinux.org address.
+2. The register page is fetched only on a lead, once a day as a safety net,
+   an hour after an unreadable result, or with --check-page. It sits behind
+   Anubis, so the script pays the same proof of work a browser does, then
+   classifies the page with hard rules:
+     OPEN     HTTP 200, the new-account form (username, email, captcha,
+              captcha salt), and no closed notice
+     CLOSED   the closed/paused notice on HTTP 200 or 503
+     UNKNOWN  anything else; never reported as open
+
+Actions: the first OPEN sends one ntfy alert and one Steward inbox message
+(each retried on later runs until it succeeds, never repeated while open).
+A lead that finds the page CLOSED or UNKNOWN goes to Steward's inbox only.
+Three unreadable page checks, or three runs that cannot read the feeds, raise
+one ntfy alert each until they recover.
+
+Usage:
+  aur-registration-watch                one run (what the timer does)
+  aur-registration-watch --check-page   one run that also checks the page now
+  aur-registration-watch --classify FILE [--status N]
+                                        classify a saved page; no network, no state
+
+Environment (tests and overrides):
+  AUR_WATCH_STATE_DIR   state directory (default ~/.local/state/aur-watch)
+  AUR_WATCH_NOTIFY_CMD  phone alert command (default: ntfy-send)
+  AUR_WATCH_INBOX_CMD   Steward inbox command (default: steward msg)
+  AUR_WATCH_PAGE_FILE, AUR_WATCH_PAGE_STATUS, AUR_WATCH_NEWS_FILE,
+  AUR_WATCH_LIST_FILE   read these files instead of the network
+"""
+
+import argparse
+import datetime
+import hashlib
+import http.cookiejar
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+
+REGISTER_URL = "https://aur.archlinux.org/register"
+ANUBIS_PASS_PATH = "/.within.website/x/cmd/anubis/api/pass-challenge"
+FEEDS = {
+    "news": "https://archlinux.org/feeds/news/",
+    "list": "https://lists.archlinux.org/archives/list/aur-general@lists.archlinux.org/feed/",
+}
+USER_AGENT = "aur-registration-watch/1 (+https://github.com/nuvemlabs/secrets)"
+HTTP_TIMEOUT_SECONDS = 20
+# Anubis difficulty is leading zero hex digits; 4 is ~65k hashes. Refuse
+# anything that would pin a CPU instead of quietly burning minutes.
+MAX_ANUBIS_DIFFICULTY = 6
+PAGE_CHECK_INTERVAL = datetime.timedelta(hours=24)
+PAGE_RETRY_INTERVAL = datetime.timedelta(hours=1)
+UNREADABLE_ALERT_AFTER = 3
+SEEN_GUIDS_KEPT = 500
+
+OPEN, CLOSED, UNKNOWN = "OPEN", "CLOSED", "UNKNOWN"
+
+CLOSED_NOTICE = re.compile(
+    r"registration\s+(?:is\s+)?(?:temporarily\s+|currently\s+)?(?:closed|paused|disabled)",
+    re.IGNORECASE,
+)
+FORM_FIELDS = ("U", "E", "captcha", "captcha_salt")
+LEAD_TOPIC = re.compile(r"regist|sign[\s-]?up|new\s+accounts?|account\s+creation", re.IGNORECASE)
+AUR_WORD = re.compile(r"\bAUR\b", re.IGNORECASE)
+STAFF_ADDRESS = re.compile(r"@archlinux\.org\b", re.IGNORECASE)
+
+
+def log(message):
+    print(message, flush=True)
+
+
+def now_utc():
+    return datetime.datetime.now(datetime.timezone.utc)
+
+
+# ─── Page classification ────────────────────────────────────────────────────
+
+def is_anubis_challenge(html):
+    return 'id="anubis_challenge"' in html
+
+
+def has_registration_form(html):
+    if 'id="edit-profile-form"' not in html:
+        return False
+    return all(re.search(r'<input\b[^>]*\bname="%s"' % re.escape(field), html) for field in FORM_FIELDS)
+
+
+def classify(status, html):
+    """Return (state, reason) for a fetched register page."""
+    if is_anubis_challenge(html):
+        return UNKNOWN, "HTTP %s, still the Anubis bot check" % status
+    form = has_registration_form(html)
+    notice = CLOSED_NOTICE.search(html) is not None
+    if status == 200 and form and not notice:
+        return OPEN, "HTTP 200, registration form present, no closed notice"
+    if notice and status in (200, 503):
+        return CLOSED, "HTTP %s, closed notice present" % status
+    return UNKNOWN, "HTTP %s, form %s, closed notice %s" % (
+        status, "present" if form else "absent", "present" if notice else "absent")
+
+
+# ─── Network ────────────────────────────────────────────────────────────────
+
+def http_get(opener, url):
+    """GET url; return (status, text). Non-2xx is a result, not an error."""
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with opener.open(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+            return response.status, response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as error:
+        return error.code, error.read().decode("utf-8", "replace")
+
+
+def solve_anubis(challenge):
+    """Find the nonce whose sha256(randomData + nonce) has `difficulty` leading zero hex digits."""
+    data = challenge["challenge"]["randomData"]
+    difficulty = int(challenge["rules"]["difficulty"])
+    if difficulty > MAX_ANUBIS_DIFFICULTY:
+        raise ValueError("Anubis difficulty %d is above the limit %d" % (difficulty, MAX_ANUBIS_DIFFICULTY))
+    prefix = "0" * difficulty
+    nonce = 0
+    while True:
+        digest = hashlib.sha256((data + str(nonce)).encode()).hexdigest()
+        if digest.startswith(prefix):
+            return digest, nonce
+        nonce += 1
+
+
+def fetch_register_page():
+    """Fetch the register page, passing the Anubis check once if it is shown."""
+    if os.environ.get("AUR_WATCH_PAGE_FILE"):
+        with open(os.environ["AUR_WATCH_PAGE_FILE"], encoding="utf-8") as page:
+            return int(os.environ.get("AUR_WATCH_PAGE_STATUS", "200")), page.read()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    status, html = http_get(opener, REGISTER_URL)
+    match = re.search(r'<script id="anubis_challenge" type="application/json">(.*?)</script>', html, re.S)
+    if not match:
+        return status, html
+    challenge = json.loads(match.group(1))
+    if challenge["rules"].get("algorithm") not in ("fast", "slow"):
+        return status, html
+    started = time.monotonic()
+    digest, nonce = solve_anubis(challenge)
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    origin = "{0.scheme}://{0.netloc}".format(urllib.parse.urlsplit(REGISTER_URL))
+    query = urllib.parse.urlencode({
+        "id": challenge["challenge"]["id"],
+        "response": digest,
+        "nonce": nonce,
+        "redir": REGISTER_URL,
+        "elapsedTime": elapsed_ms,
+    })
+    return http_get(opener, origin + ANUBIS_PASS_PATH + "?" + query)
+
+
+def fetch_feed(name):
+    override = os.environ.get("AUR_WATCH_%s_FILE" % name.upper())
+    if override:
+        with open(override, "rb") as feed:
+            return feed.read()
+    opener = urllib.request.build_opener()
+    status, text = http_get(opener, FEEDS[name])
+    if status != 200:
+        raise OSError("HTTP %s" % status)
+    return text.encode("utf-8")
+
+
+def parse_feed(raw):
+    """Return RSS items as dicts: guid, title, link, text, author."""
+    items = []
+    for item in ET.fromstring(raw).iter("item"):
+        author = item.findtext("author") or item.findtext("{http://purl.org/dc/elements/1.1/}creator") or ""
+        title = item.findtext("title") or ""
+        items.append({
+            "guid": item.findtext("guid") or item.findtext("link") or title,
+            "title": title,
+            "link": item.findtext("link") or "",
+            "text": title + "\n" + (item.findtext("description") or ""),
+            # Hyperkitty writes addresses with a fullwidth at sign
+            "author": author.replace("＠", "@"),
+        })
+    return items
+
+
+def is_lead(feed_name, item):
+    if not (AUR_WORD.search(item["text"]) and LEAD_TOPIC.search(item["text"])):
+        return False
+    return feed_name == "news" or STAFF_ADDRESS.search(item["author"]) is not None
+
+
+# ─── State ──────────────────────────────────────────────────────────────────
+
+def state_path():
+    base = os.environ.get("AUR_WATCH_STATE_DIR") or os.path.join(
+        os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "aur-watch")
+    return os.path.join(base, "state.json")
+
+
+def load_state(path):
+    state = {
+        "seen": {},
+        "page": None,
+        "open_alert": {"ntfy": False, "inbox": False},
+        "page_unreadable_streak": 0,
+        "page_unreadable_alerted": False,
+        "feed_failure_streak": 0,
+        "feed_failure_alerted": False,
+    }
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as stored:
+            state.update(json.load(stored))
+    return state
+
+
+def save_state(path, state):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    handle, temp_path = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".state-")
+    with os.fdopen(handle, "w", encoding="utf-8") as temp:
+        json.dump(state, temp, indent=2, sort_keys=True)
+        temp.write("\n")
+    os.replace(temp_path, path)
+
+
+def page_check_due(state, now):
+    page = state["page"]
+    if page is None:
+        return True
+    elapsed = now - datetime.datetime.fromisoformat(page["checked_at"])
+    if page["state"] == UNKNOWN:
+        return elapsed >= PAGE_RETRY_INTERVAL
+    return elapsed >= PAGE_CHECK_INTERVAL
+
+
+# ─── Actions ────────────────────────────────────────────────────────────────
+
+def run_command(env_name, default, args):
+    command = shlex.split(os.environ.get(env_name) or default) + args
+    try:
+        result = subprocess.run(command, check=False, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        log("action failed: %s: %s" % (command[0], error))
+        return False
+    if result.returncode != 0:
+        log("action failed: %s exited %d" % (command[0], result.returncode))
+    return result.returncode == 0
+
+
+def notify_phone(title, message):
+    return run_command("AUR_WATCH_NOTIFY_CMD", "ntfy-send", ["-t", title, "-p", "high", "-g", "rotating_light", message])
+
+
+def message_steward(message):
+    return run_command("AUR_WATCH_INBOX_CMD", "steward msg", [message])
+
+
+def lead_lines(leads):
+    return "\n".join("- %s: %s" % (lead["title"], lead["link"]) for lead in leads)
+
+
+# ─── One run ────────────────────────────────────────────────────────────────
+
+def read_feeds(state):
+    """Update seen GUIDs; return (leads, all_feeds_read). A feed's first read is a baseline."""
+    leads, all_read = [], True
+    for name in FEEDS:
+        try:
+            items = parse_feed(fetch_feed(name))
+        except (OSError, ET.ParseError) as error:
+            log("feed %s unreadable: %s" % (name, error))
+            all_read = False
+            continue
+        seen = state["seen"].get(name)
+        if seen is not None:
+            leads += [item for item in items if item["guid"] not in seen and is_lead(name, item)]
+        known = set(seen or [])
+        fresh = [item["guid"] for item in items if item["guid"] not in known]
+        state["seen"][name] = (fresh + (seen or []))[:SEEN_GUIDS_KEPT]
+    return leads, all_read
+
+
+def track_feed_health(state, all_read):
+    if all_read:
+        state["feed_failure_streak"] = 0
+        state["feed_failure_alerted"] = False
+        return
+    state["feed_failure_streak"] += 1
+    if state["feed_failure_streak"] >= UNREADABLE_ALERT_AFTER and not state["feed_failure_alerted"]:
+        state["feed_failure_alerted"] = notify_phone(
+            "AUR watch can't read the feeds",
+            "%d runs in a row could not read the Arch news or aur-general feed. "
+            "Check: journalctl --user -u aur-registration-watch" % state["feed_failure_streak"])
+
+
+def send_open_alert(state):
+    sent = state["open_alert"]
+    if not sent["ntfy"]:
+        sent["ntfy"] = notify_phone("AUR sign-up is open", "AUR sign-up is open: %s" % REGISTER_URL)
+    if not sent["inbox"]:
+        sent["inbox"] = message_steward(
+            "AUR account registration is OPEN (aur-registration-watch, %s). Tell Daniel: register at %s with "
+            "~/.ssh/aur_ed25519.pub, then the nuvemlabs-secrets and nuvemlabs-secrets-bridge pushes are ready."
+            % (state["page"]["checked_at"], REGISTER_URL))
+
+
+def act_on_page(state, page_state, reason, leads):
+    if page_state == OPEN:
+        state["page_unreadable_streak"] = 0
+        state["page_unreadable_alerted"] = False
+        send_open_alert(state)
+        return
+    if page_state == CLOSED:
+        state["page_unreadable_streak"] = 0
+        state["page_unreadable_alerted"] = False
+        state["open_alert"] = {"ntfy": False, "inbox": False}
+    else:
+        state["page_unreadable_streak"] += 1
+        if state["page_unreadable_streak"] >= UNREADABLE_ALERT_AFTER and not state["page_unreadable_alerted"]:
+            state["page_unreadable_alerted"] = notify_phone(
+                "AUR watch can't read the page",
+                "%d page checks in a row were unreadable (%s). Look yourself: %s"
+                % (state["page_unreadable_streak"], reason, REGISTER_URL))
+    if leads:
+        message_steward(
+            "FYI (aur-registration-watch): Arch staff posted about AUR registration, and the register page reads %s (%s).\n%s"
+            % (page_state, reason, lead_lines(leads)))
+
+
+def run(force_page_check):
+    path = state_path()
+    state = load_state(path)
+    now = now_utc()
+
+    leads, all_read = read_feeds(state)
+    track_feed_health(state, all_read)
+    for lead in leads:
+        log("lead: %s <%s>" % (lead["title"], lead["link"]))
+
+    page = state["page"]
+    if page and page["state"] == OPEN and not all(state["open_alert"].values()):
+        send_open_alert(state)
+    if force_page_check or leads or page_check_due(state, now):
+        try:
+            status, html = fetch_register_page()
+            page_state, reason = classify(status, html)
+        except (OSError, ValueError, KeyError) as error:
+            page_state, reason = UNKNOWN, "fetch failed: %s" % error
+        state["page"] = {"state": page_state, "reason": reason, "checked_at": now.isoformat()}
+        act_on_page(state, page_state, reason, leads)
+        log("page: %s (%s)" % (page_state, reason))
+    elif page:
+        log("page: %s at %s, next check when due or on a lead" % (page["state"], page["checked_at"]))
+
+    save_state(path, state)
+    log("feeds: %s, leads: %d" % ("ok" if all_read else "unreadable", len(leads)))
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Alert once when AUR account registration opens.",
+        epilog="Details: the docstring at the top of this script and the README.")
+    parser.add_argument("--check-page", action="store_true", help="check the register page on this run")
+    parser.add_argument("--classify", metavar="FILE", help="classify a saved register page and exit")
+    parser.add_argument("--status", type=int, default=200, help="HTTP status for --classify (default 200)")
+    args = parser.parse_args()
+
+    if args.classify:
+        with open(args.classify, encoding="utf-8") as page:
+            page_state, reason = classify(args.status, page.read())
+        print("%s (%s)" % (page_state, reason))
+        return 0
+    return run(args.check_page)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
