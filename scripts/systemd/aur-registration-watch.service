@@ -1,0 +1,11 @@
+[Unit]
+Description=AUR watch: alert once when AUR account registration opens
+Documentation=https://github.com/nuvemlabs/secrets#aur-registration-watch
+
+[Service]
+Type=oneshot
+# ntfy-send lives in dotfiles util-scripts, steward in ~/.local/bin
+Environment=PATH=%h/.local/bin:%h/repos/dotfiles/util-scripts:/usr/local/bin:/usr/bin
+ExecStart=@BIN_DIR@/aur-registration-watch
+TimeoutStartSec=5min
+Nice=10

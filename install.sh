@@ -5,9 +5,49 @@
 # Packaged:            PREFIX=/usr DESTDIR="$pkgdir" ./install.sh
 #                      -> $DESTDIR$PREFIX/lib/secrets + $DESTDIR$PREFIX/bin
 # SECRETS_INSTALL_DIR / SECRETS_BIN_DIR override either layout.
+#
+# Personal, opt-in:    ./install.sh --aur-watch
+#                      -> aur-registration-watch in ~/.local/bin + its systemd
+#                      user timer (SECRETS_SYSTEMD_USER_DIR overrides the unit
+#                      dir; SECRETS_SKIP_SYSTEMCTL=1 skips enabling the timer).
+#                      Installs only the watcher; never part of a package.
 set -euo pipefail
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+install_aur_watch() {
+    if [[ -n "${PREFIX:-}" || -n "${DESTDIR:-}" ]]; then
+        echo "[secrets] --aur-watch is a per-user install; unset PREFIX and DESTDIR" >&2
+        exit 1
+    fi
+    local bin_dir="${SECRETS_BIN_DIR:-$HOME/.local/bin}"
+    local unit_dir="${SECRETS_SYSTEMD_USER_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+    local unit="aur-registration-watch"
+
+    echo "[secrets] Installing $unit to $bin_dir"
+    install -d "$bin_dir" "$unit_dir"
+    install -m 755 "$SOURCE_DIR/scripts/$unit" "$bin_dir/"
+
+    echo "[secrets] Installing $unit.service and $unit.timer to $unit_dir"
+    sed "s|@BIN_DIR@|$bin_dir|g" "$SOURCE_DIR/scripts/systemd/$unit.service" > "$unit_dir/$unit.service"
+    install -m 644 "$SOURCE_DIR/scripts/systemd/$unit.timer" "$unit_dir/"
+
+    if [[ "${SECRETS_SKIP_SYSTEMCTL:-0}" == "1" ]]; then
+        echo "[secrets] Skipped enabling the timer (SECRETS_SKIP_SYSTEMCTL=1)"
+    else
+        systemctl --user daemon-reload
+        systemctl --user enable --now "$unit.timer"
+        echo "[secrets] $unit.timer enabled: systemctl --user list-timers $unit.timer"
+    fi
+}
+
+if [[ "${1:-}" == "--aur-watch" ]]; then
+    install_aur_watch
+    exit 0
+elif [[ $# -gt 0 ]]; then
+    echo "usage: $0 [--aur-watch]" >&2
+    exit 2
+fi
 
 if [[ -n "${PREFIX:-}" ]]; then
     DEFAULT_LIB_DIR="$PREFIX/lib/secrets"
