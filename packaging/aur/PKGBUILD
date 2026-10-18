@@ -1,6 +1,6 @@
 # Maintainer: Daniel Paiva <danielpmo at gmail dot com>
 pkgname=nuvemlabs-secrets
-pkgver=1.1.1
+pkgver=1.2.0
 pkgrel=1
 pkgdesc="OS-native secret storage for bash and zsh (libsecret, macOS Keychain, Windows Credential Manager)"
 arch=('any')
@@ -9,8 +9,11 @@ license=('MIT')
 depends=('bash' 'libsecret' 'glib2')
 optdepends=('fzf: interactive picker (secret_fz)'
             'wl-clipboard: copy to clipboard on Wayland (secret_fz -c)'
-            'xclip: copy to clipboard on X11 (secret_fz -c)')
+            'xclip: copy to clipboard on X11 (secret_fz -c)'
+            'jq: back up to and restore from Bitwarden (secret backup, secrets-backup)'
+            'bitwarden-cli: back up to and restore from Bitwarden (secret backup, secrets-backup)')
 makedepends=('git')
+checkdepends=('jq')
 source=("$pkgname::git+$url.git#tag=v$pkgver")
 sha256sums=('SKIP')
 
@@ -21,6 +24,7 @@ check() {
   bash tests/test_file.sh
   bash tests/test_doctor.sh
   bash tests/test_install.sh
+  bash tests/test_backup.sh
 }
 
 package() {
