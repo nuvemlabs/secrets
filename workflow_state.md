@@ -89,3 +89,20 @@ Goal: one phone alert + Steward inbox message when AUR account registration open
 - tests/test_aur_watch.sh: 48 pass (classify fixtures, alert once/no repeat, retry of a failed alert, leads, baseline, unreadable streaks, install); mutation of the dedupe logic fails 6 asserts; all other suites still pass
 - Live run 2026-10-17: page CLOSED (HTTP 503, closed notice), feeds ok, leads 0, nothing sent
 - Not installed on this machine: the executor run had no permission to write outside the worktree. After merge: `cd ~/repos/secrets && ./install.sh --aur-watch`
+
+## 2026-10-18 — Release v1.2.0 packaging (card #139, branch steward/139)
+
+Goal: first AUR upload and brew ship v1.2.0 (secret verbs, secret service, backup/restore), not v1.1.1.
+
+### Decisions
+- D16 (2026-10-18) packaging: jq and bitwarden-cli are AUR optdepends (only `secret backup|restore` use them), jq is a checkdepend for test_backup; brew `depends_on "jq"` (small) and names bitwarden-cli in caveats (large, Node) — assumptions: the library itself never needs either — undo: revert the steward/139 packaging commit
+- D17 (2026-10-18) packaging: the formula drops `revision:` until v1.2.0 is tagged — assumptions: the tag goes on the merge commit on main, which this branch can't know; the old revision is the v1.1.1 commit and would fail against the v1.2.0 tag — undo: at release, add `revision: "$(git rev-parse v1.2.0^{commit})"` to the repo and tap formula
+
+### Log
+- makepkg -f from this branch (temp PKGBUILD, source git+file://worktree#branch=steward/139): check() passes incl. test_backup 38/38; package ships usr/bin/secrets-backup; `makepkg --printsrcinfo | diff - .SRCINFO` empty
+- Not checked here: ruby/brew not installed on this machine, so formula syntax, brew audit and brew test wait for the tag
+
+### Release steps (Daniel's go; publishes)
+1. After merge: `cd ~/repos/secrets && git tag -a v1.2.0 -m v1.2.0 main && git push origin main v1.2.0`, GitHub Release v1.2.0
+2. Add `revision:` (the v1.2.0 commit) to packaging/homebrew/secrets.rb, copy to ~/repos/homebrew-tap/Formula/secrets.rb, push the tap; `brew install nuvemlabs/tap/secrets && brew test secrets && brew audit --strict --online secrets` on a brew machine
+3. Copy PKGBUILD + .SRCINFO to ~/repos/aur-nuvemlabs-secrets, makepkg -f there (builds from the pushed tag), commit; push with the AUR account

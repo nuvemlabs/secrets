@@ -2,10 +2,11 @@ class Secrets < Formula
   desc "OS-native secret storage for bash and zsh (Keychain, libsecret)"
   homepage "https://github.com/nuvemlabs/secrets"
   url "https://github.com/nuvemlabs/secrets.git",
-      tag:      "v1.1.1",
-      revision: "1a6384a4b5df11d6a3911d9841203edff57f49d5"
+      tag:      "v1.2.0"
   license "MIT"
   head "https://github.com/nuvemlabs/secrets.git", branch: "main"
+
+  depends_on "jq"
 
   def install
     ENV["PREFIX"] = prefix
@@ -16,6 +17,10 @@ class Secrets < Formula
     <<~EOS
       Load the library from your shell rc (~/.zshrc or ~/.bashrc):
         source "#{HOMEBREW_PREFIX}/lib/secrets/secrets.sh"
+
+      `secret backup` / `secret restore` (secrets-backup) also need the
+      Bitwarden CLI:
+        brew install bitwarden-cli
     EOS
   end
 
@@ -23,5 +28,6 @@ class Secrets < Formula
     help = shell_output("bash -c 'source #{lib}/secrets/secrets.sh && secret --help'")
     assert_match "Usage: secret", help
     assert_match "secrets-doctor", shell_output("#{bin}/secrets-doctor --help")
+    assert_match "secrets-backup push", shell_output("#{bin}/secrets-backup --help")
   end
 end
