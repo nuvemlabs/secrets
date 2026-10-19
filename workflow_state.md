@@ -107,3 +107,15 @@ Goal: first AUR upload and brew ship v1.2.0 (secret verbs, secret service, backu
 1. After merge: `cd ~/repos/secrets && git tag -a v1.2.0 -m v1.2.0 main && git push origin main v1.2.0`, GitHub Release v1.2.0
 2. Add `revision:` (the v1.2.0 commit) to packaging/homebrew/secrets.rb, copy to ~/repos/homebrew-tap/Formula/secrets.rb, push the tap; `brew install nuvemlabs/tap/secrets && brew test secrets && brew audit --strict --online secrets` on a brew machine
 3. Copy PKGBUILD + .SRCINFO to ~/repos/aur-nuvemlabs-secrets, makepkg -f there (builds from the pushed tag), commit; push with the AUR account
+
+## 2026-10-19 — AUR watch tests isolated from the live watcher (card #155, branch steward/155)
+Goal: `tests/test_aur_watch.sh` passes with any caller env and never writes the live `aur-registration-watch` unit.
+
+### Decisions
+- D1 (2026-10-19) tests: fix only the test (sandbox HOME + XDG_CONFIG/STATE/DATA/CACHE_HOME, unset SECRETS_*/PREFIX/DESTDIR/AUR_WATCH_*); install.sh already honours XDG_CONFIG_HOME correctly — assumptions: the installer's XDG behaviour is intended — undo: revert the commit
+
+### Log
+- Root cause: install.sh puts units in `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user`; the test only overrode HOME, so an exported XDG_CONFIG_HOME aimed the test install at the live unit dir (ExecStart then pointed at a deleted temp dir). Reproduced with a scratch XDG_CONFIG_HOME: 43 passed, 5 failed, units written there
+- After: 52/52 with a scratch XDG_CONFIG_HOME + SECRETS_SYSTEMD_USER_DIR/SECRETS_BIN_DIR/AUR_WATCH_STATE_DIR overrides (0 files written to scratch), with a clean env, and with XDG_CONFIG_HOME=~/.config; live service/timer/watcher sha256 identical before/after
+- New guard test fingerprints the live service, timer and watcher before the run and compares at the end; proven to fire on a sabotaged copy (FAIL on clobber)
+- Not checked here: shellcheck is not installed on this machine (CI runs it); `systemctl --user list-timers` was not permitted in the headless run

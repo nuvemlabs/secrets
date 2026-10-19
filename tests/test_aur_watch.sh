@@ -18,6 +18,33 @@ FAIL_COUNT=0
 TMPDIR_TEST="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
 
+# The live watcher, as the installer would resolve it from the caller's env.
+# Fingerprinted now and checked at the end: the suite must never touch it.
+REAL_UNIT_DIR="${SECRETS_SYSTEMD_USER_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+REAL_FILES=(
+    "$REAL_UNIT_DIR/aur-registration-watch.service"
+    "$REAL_UNIT_DIR/aur-registration-watch.timer"
+    "${SECRETS_BIN_DIR:-$HOME/.local/bin}/aur-registration-watch"
+)
+fingerprint() {
+    local f
+    for f in "$@"; do
+        if [[ -e "$f" ]]; then sha256sum "$f"; else echo "absent  $f"; fi
+    done
+}
+REAL_BEFORE="$(fingerprint "${REAL_FILES[@]}")"
+
+# Sandbox every path the installer and watcher derive from the environment,
+# so a caller's XDG_* or install overrides can't send writes to the live setup.
+export HOME="$TMPDIR_TEST/home"
+export XDG_CONFIG_HOME="$HOME/.config"
+export XDG_STATE_HOME="$HOME/.local/state"
+export XDG_DATA_HOME="$HOME/.local/share"
+export XDG_CACHE_HOME="$HOME/.cache"
+mkdir -p "$HOME"
+unset PREFIX DESTDIR SECRETS_INSTALL_DIR SECRETS_BIN_DIR SECRETS_SYSTEMD_USER_DIR SECRETS_SKIP_SYSTEMCTL
+while IFS= read -r var; do unset "$var"; done < <(compgen -e | grep '^AUR_WATCH_' || true)
+
 # ─────────────────────────────────────────────────────────────────────────────
 #   Test Helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -192,7 +219,7 @@ assert_contains "the alert says it can't read the feeds" "$(cat "$CASE_DIR/logs/
 
 echo "-- install.sh --aur-watch --"
 home="$TMPDIR_TEST/install-home"
-out="$(HOME="$home" SECRETS_SKIP_SYSTEMCTL=1 bash "$INSTALLER" --aur-watch)"
+out="$(env -u XDG_CONFIG_HOME HOME="$home" SECRETS_SKIP_SYSTEMCTL=1 bash "$INSTALLER" --aur-watch)"
 units="$home/.config/systemd/user"
 assert_file "watcher installed" "$home/.local/bin/aur-registration-watch"
 assert_file "service installed" "$units/aur-registration-watch.service"
@@ -214,6 +241,21 @@ else
     echo "  PASS: --aur-watch refuses PREFIX/DESTDIR"
     ((PASS_COUNT++)) || true
 fi
+home="$TMPDIR_TEST/xdg-home"
+xdg="$TMPDIR_TEST/xdg-config"
+HOME="$home" XDG_CONFIG_HOME="$xdg" SECRETS_SKIP_SYSTEMCTL=1 bash "$INSTALLER" --aur-watch >/dev/null
+assert_file "XDG_CONFIG_HOME: service under it" "$xdg/systemd/user/aur-registration-watch.service"
+assert_file "XDG_CONFIG_HOME: timer under it" "$xdg/systemd/user/aur-registration-watch.timer"
+if [[ ! -e "$home/.config" ]]; then
+    echo "  PASS: XDG_CONFIG_HOME: nothing under ~/.config"
+    ((PASS_COUNT++)) || true
+else
+    echo "  FAIL: XDG_CONFIG_HOME: installer also wrote $home/.config"
+    ((FAIL_COUNT++)) || true
+fi
+
+echo "-- the live watcher is untouched --"
+assert_eq "live service, timer and watcher unchanged" "$REAL_BEFORE" "$(fingerprint "${REAL_FILES[@]}")"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #   Summary
