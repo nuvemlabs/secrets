@@ -119,3 +119,11 @@ Goal: `tests/test_aur_watch.sh` passes with any caller env and never writes the 
 - After: 52/52 with a scratch XDG_CONFIG_HOME + SECRETS_SYSTEMD_USER_DIR/SECRETS_BIN_DIR/AUR_WATCH_STATE_DIR overrides (0 files written to scratch), with a clean env, and with XDG_CONFIG_HOME=~/.config; live service/timer/watcher sha256 identical before/after
 - New guard test fingerprints the live service, timer and watcher before the run and compares at the end; proven to fire on a sabotaged copy (FAIL on clobber)
 - Not checked here: shellcheck is not installed on this machine (CI runs it); `systemctl --user list-timers` was not permitted in the headless run
+
+## 2026-10-20 — #140 keychain values out of argv (branch steward/140)
+
+### Decisions
+- D10 (2026-10-20) keychain: `secret_set` on macOS feeds `add-generic-password` to `security -q -i` on stdin; values with a newline, or a command line over 4094 bytes, are refused (status 2) rather than falling back to `-w` in argv — assumptions: quoting and limits taken from Apple's security.c split_line/readline (static 4096-byte buffer; overflow runs as a second command); secrets with newlines are rare and better refused than leaked — undo: revert 51796b0
+
+### Log
+- 51796b0 fix + hermetic stubbed tests (run on Linux too) + live macOS cases (quotes/backslash round-trip, argv shim + ps sampler); 1635ba9 README limits. Linux: all 9 suites pass, shellcheck clean; mutation check: old `-w` impl fails 12 stubbed asserts, dropping the `"` escape fails 2. Live macOS cases run in CI on the next push. Status: REVIEW
