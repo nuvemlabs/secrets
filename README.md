@@ -129,6 +129,11 @@ Installed next to the library: `~/.local/bin` from source, `/usr/bin` or the Hom
 | Windows (Git Bash/WSL) | `credmanager` | PowerShell `CredentialManager` module | Windows Credential Manager |
 | Any (fallback) | `file` | bash builtins | `~/.accessTokens` (read-only) |
 
+Values never appear in process arguments, where `ps` could see them. On macOS the keychain backend
+sends the command to `security -i` on stdin, so it can't store a value that contains a newline,
+or one whose command line goes over about 4 KB (4094 bytes). It refuses either with an error
+rather than store a mangled value.
+
 ## How It Works
 
 ```
@@ -155,7 +160,7 @@ for t in tests/test_*.sh; do bash "$t" || echo "FAILED: $t"; done
 ```
 
 The keychain, libsecret and credmanager suites use a throwaway service namespace in the real
-store and skip on platforms without it; the file, doctor, install and AUR watch suites are hermetic.
+store and skip on platforms without it (the keychain suite's stubbed `security` tests run everywhere); the file, doctor, install and AUR watch suites are hermetic.
 Packaging sources live in `packaging/` (AUR `PKGBUILD` + `.SRCINFO`, Homebrew formula).
 
 ## AUR registration watch
