@@ -92,12 +92,46 @@ __secret_get_keychain() {
     __secret_get_keychain_try -a "$key" -s "$SECRETS_SERVICE"
 }
 
+# `security -i` reads each command line into a static 4096-byte buffer
+# (SecurityTool readline.c, MAX_LINE_LEN). A longer line is cut and the rest
+# runs as a second command; a 4095-byte line leaves its newline behind as an
+# empty command whose status 0 masks the real one. So the line, without its
+# newline, must stay at or below 4094 bytes.
+__SECRETS_KEYCHAIN_MAX_LINE=4094
+
+__secret_keychain_quote() {
+    # Quote one argument for `security -i`'s split_line parser: inside "..."
+    # a backslash escapes any character, so only \ and " need escaping.
+    local arg="$1"
+    arg="${arg//\\/\\\\}"
+    arg="${arg//\"/\\\"}"
+    printf '"%s"' "$arg"
+}
+
 __secret_set_keychain() {
     local key="$1"
     local value="$2"
+    # The value goes to `security -i` on stdin, never in argv, where `ps`
+    # would show it for as long as the call runs. -i ends a command at a
+    # newline, so a value (or key) containing one cannot be stored this way.
+    if [[ "$key$value$SECRETS_SERVICE" == *$'\n'* ]]; then
+        echo "[secrets] cannot store '${key%%$'\n'*}': the keychain backend does not support newlines in a key or value" >&2
+        return 2
+    fi
     # -U updates if exists, otherwise creates
+    local line
+    line="add-generic-password -U -a $(__secret_keychain_quote "$key") -s $(__secret_keychain_quote "$SECRETS_SERVICE") -l $(__secret_keychain_quote "$key") -w $(__secret_keychain_quote "$value")"
+    local line_bytes
+    # Bytes, not characters (${#line} counts characters in a UTF-8 locale);
+    # $(( )) also drops the padding BSD wc puts before the count.
+    line_bytes=$(( $(printf '%s' "$line" | wc -c) ))
+    if (( line_bytes > __SECRETS_KEYCHAIN_MAX_LINE )); then
+        echo "[secrets] cannot store '$key': value too long for the keychain backend (command line is $line_bytes bytes, max $__SECRETS_KEYCHAIN_MAX_LINE)" >&2
+        return 2
+    fi
+    # -q: no "returned N" chatter; the exit status is the command's own.
     # stdout suppressed: -U prints deleted entry details on update
-    security add-generic-password -U -a "$key" -s "$SECRETS_SERVICE" -l "$key" -w "$value" &>/dev/null
+    printf '%s\n' "$line" | security -q -i &>/dev/null
 }
 
 __secret_delete_keychain() {
