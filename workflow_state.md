@@ -127,3 +127,11 @@ Goal: `tests/test_aur_watch.sh` passes with any caller env and never writes the 
 
 ### Log
 - 51796b0 fix + hermetic stubbed tests (run on Linux too) + live macOS cases (quotes/backslash round-trip, argv shim + ps sampler); 1635ba9 README limits. Linux: all 9 suites pass, shellcheck clean; mutation check: old `-w` impl fails 20 of 39 asserts, dropping the `"` escape fails 2. Live macOS cases run in CI on the next push. Status: REVIEW
+
+## 2026-11-06 — #374 credmanager values out of argv (branch steward/374)
+
+### Decisions
+- D18 (2026-11-06) credmanager: value on PowerShell's stdin (StreamReader over OpenStandardInput, UTF-8), key/service in env vars SECRETS_CM_SERVICE/SECRETS_CM_KEY appended to WSLENV; set keeps stderr and returns PowerShell's status (ErrorActionPreference Stop); get/delete/list keep their quiet behaviour — assumptions: WSL only passes variables named in WSLENV; reading stdin as UTF-8 avoids the console code page; not run on real Windows from here — undo: revert the steward/374 backend commit
+
+### Log
+- Hermetic stubbed tests (24) run on any OS; live suite unchanged apart from a quotes/$(...)/backslash case and cleanup via __secret_delete_credmanager. Linux: all 9 suites pass, shellcheck 0.11.0 clean (CI flags). Mutation check: main's credmanager.sh fails 21 of 24, including both argv asserts and the failed-set exit code. Not exercised: real powershell.exe + CredentialManager (no Windows here; CI has none either). Status: REVIEW
