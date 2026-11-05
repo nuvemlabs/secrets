@@ -129,7 +129,9 @@ Installed next to the library: `~/.local/bin` from source, `/usr/bin` or the Hom
 | Windows (Git Bash/WSL) | `credmanager` | PowerShell `CredentialManager` module | Windows Credential Manager |
 | Any (fallback) | `file` | bash builtins | `~/.accessTokens` (read-only) |
 
-Values never appear in process arguments, where `ps` could see them. On macOS the keychain backend
+Values never appear in process arguments, where `ps` could see them. On Windows the credmanager
+backend pipes the value to PowerShell on stdin and passes key and service names in environment
+variables, so a quote in any of them can't break out of the script. On macOS the keychain backend
 sends the command to `security -i` on stdin, so it can't store a value that contains a newline,
 or one whose command line goes over about 4 KB (4094 bytes). It refuses either with an error
 rather than store a mangled value.
