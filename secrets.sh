@@ -133,6 +133,9 @@ Commands:
   backup [-a] [-n]    Copy secrets to Bitwarden, a folder per service
   restore [-a] [-n]   Copy them back from Bitwarden (--force overwrites)
 
+  -a  every service, not just the current one
+  -n  dry run: report what would change, change nothing
+
 Service: $SECRETS_SERVICE. Run 'secret <command> -h' for a command's options.
 EOF
 }

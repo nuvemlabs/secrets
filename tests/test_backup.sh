@@ -124,6 +124,9 @@ rc=0; "$BACKUP" >/dev/null 2>&1 || rc=$?
 assert_eq "no mode exits 2" "2" "$rc"
 rc=0; "$BACKUP" push --force >/dev/null 2>&1 || rc=$?
 assert_eq "--force on push exits 2" "2" "$rc"
+out=$(SECRETS_SERVICE='svc&one' "$BACKUP" --help)
+assert_contains "help explains -a against the current service" "not just the current one (svc&one)" "$out"
+assert_contains "help maps secret backup/restore to push/pull" "secret backup\` is push" "$out"
 
 echo "-- locked vault --"
 rc=0; out=$(BW_STUB_STATUS=locked run push) || rc=$?
