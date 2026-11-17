@@ -80,7 +80,9 @@ F="$BW_STATE/folders.json" I="$BW_STATE/items.json"
 [[ -f "$I" ]] || echo '[]' > "$I"
 new_id() { echo "id-$RANDOM$RANDOM"; }
 case "$1 ${2:-}" in
-    "status "*)        echo "{\"status\":\"${BW_STUB_STATUS:-unlocked}\"}" ;;
+    "status "*)        status=${BW_STUB_STATUS:-unlocked}
+                       [[ -f "$BW_STATE/status" ]] && status=$(cat "$BW_STATE/status")
+                       echo "{\"status\":\"$status\"}" ;;
     "sync "*)          echo "Syncing complete." ;;
     "encode "*)        base64 -w0 ;;
     "list folders")    cat "$F" ;;
@@ -95,6 +97,29 @@ case "$1 ${2:-}" in
 esac
 EOF
 chmod +x "$T/bin/bw"
+
+# bw-unlock stub (dotfiles): --wait either sees Daniel unlock (the stub bw then
+# reports unlocked) or times out; every argv is logged. It shadows the real
+# bw-unlock, which would otherwise wait on this machine's vault.
+cat > "$T/bin/bw-unlock" <<'EOF'
+#!/bin/bash
+echo "$*" >> "$BW_STATE/unlock.log"
+case "${BW_UNLOCK_STUB:-timeout}" in
+    unlocks) echo unlocked > "$BW_STATE/status"; exit 0 ;;
+    *)       echo "bw-unlock: still locked after 600s" >&2; exit 1 ;;
+esac
+EOF
+chmod +x "$T/bin/bw-unlock"
+
+# The PATH without any bw-unlock, as on macOS without dotfiles
+no_unlock_path=""
+IFS=: read -ra path_dirs <<<"$PATH"
+for d in "${path_dirs[@]}"; do
+    [[ -x "$d/bw-unlock" ]] || no_unlock_path+="${no_unlock_path:+:}$d"
+done
+mkdir -p "$T/bin-no-unlock"
+cp "$T/bin/bw" "$T/bin-no-unlock/bw"
+NO_UNLOCK_PATH="$T/bin-no-unlock:$no_unlock_path"
 
 export PATH="$T/bin:$PATH" SECRETS_LIB="$T/lib.sh" SECRETS_SERVICE=svc
 
@@ -128,10 +153,34 @@ out=$(SECRETS_SERVICE='svc&one' "$BACKUP" --help)
 assert_contains "help explains -a against the current service" "not just the current one (svc&one)" "$out"
 assert_contains "help maps secret backup/restore to push/pull" "secret backup\` is push" "$out"
 
-echo "-- locked vault --"
-rc=0; out=$(BW_STUB_STATUS=locked run push) || rc=$?
+echo "-- locked vault, bw-unlock on PATH --"
+rc=0; out=$(BW_STUB_STATUS=locked BW_UNLOCK_STUB=unlocks run push -n) || rc=$?
+assert_eq "waits for bw-unlock, then runs" "0" "$rc"
+assert_eq "asks bw-unlock to wait, nothing else" "--wait" "$(cat "$BW_STATE/unlock.log")"
+assert_contains "carries on once unlocked" "created    KEY_A" "$out"
+assert_not_contains "no per-shell export hint" "$out" "BW_SESSION"
+rm -f "$BW_STATE/status" "$BW_STATE/unlock.log"
+mv "$BW_STATE/argv.log" "$BW_STATE/argv.before"
+
+rc=0; out=$(BW_STUB_STATUS=locked BW_UNLOCK_STUB=timeout run push) || rc=$?
+assert_eq "bw-unlock timeout exits 1" "1" "$rc"
+assert_contains "timeout names bw-unlock" "bw-unlock            (once, in any terminal)" "$out"
+assert_not_contains "timeout gives no per-shell export hint" "$out" "BW_SESSION"
+assert_not_contains "timeout never reaches the vault" "$(cat "$BW_STATE/argv.log")" "list"
+cat "$BW_STATE/argv.before" "$BW_STATE/argv.log" > "$BW_STATE/argv.tmp" && mv "$BW_STATE/argv.tmp" "$BW_STATE/argv.log"
+rm -f "$BW_STATE/unlock.log" "$BW_STATE/argv.before"
+
+rc=0; out=$(BW_STUB_STATUS=unauthenticated run push) || rc=$?
+assert_eq "logged-out vault exits 1" "1" "$rc"
+assert_eq "logged-out vault does not wait (bw-unlock cannot log in)" "false" \
+    "$([[ -f "$BW_STATE/unlock.log" ]] && echo true || echo false)"
+assert_contains "logged-out vault says so" "Bitwarden is unauthenticated" "$out"
+
+echo "-- locked vault, no bw-unlock (fallback) --"
+rc=0; out=$(PATH="$NO_UNLOCK_PATH" BW_STUB_STATUS=locked "$BACKUP" push 2>&1) || rc=$?
 assert_eq "locked vault exits 1" "1" "$rc"
-assert_contains "locked vault prints the unlock hint" "bw unlock --raw" "$out"
+assert_contains "locked vault prints the per-shell unlock hint" "export BW_SESSION=\$(bw unlock --raw)" "$out"
+assert_eq "fallback PATH really has no bw-unlock" "" "$(PATH="$NO_UNLOCK_PATH" command -v bw-unlock || true)"
 
 echo "-- push --dry-run --"
 out=$(run push -n)

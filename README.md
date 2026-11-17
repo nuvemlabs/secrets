@@ -85,11 +85,17 @@ The OS store lives on one machine. `secret backup` copies it to Bitwarden and
 `secret restore` brings it back (`bin/secrets-backup push|pull` underneath):
 
 ```bash
-export BW_SESSION=$(bw unlock --raw)   # once per shell
+bw-unlock                              # once per login (dotfiles), any terminal
 secret backup -n                       # dry run for the current service
 secret backup -a                       # every service
 secret restore -a                      # on a new machine
 ```
+
+With dotfiles' `bw-unlock` on PATH, a locked vault makes backup and restore
+wait (`bw-unlock --wait`, up to `BW_UNLOCK_WAIT` seconds) until you run
+`bw-unlock` in any terminal; they never ask for the master password
+themselves. Without it (e.g. macOS without dotfiles), unlock per shell with
+`export BW_SESSION=$(bw unlock --raw)`.
 
 Each service is a folder under `secrets/` (`SECRETS_BW_FOLDER`), each key a
 login item with the value as its password. Bitwarden is a backup, not a
