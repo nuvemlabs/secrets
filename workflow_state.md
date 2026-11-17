@@ -135,3 +135,12 @@ Goal: `tests/test_aur_watch.sh` passes with any caller env and never writes the 
 
 ### Log
 - Hermetic stubbed tests (24) run on any OS; live suite unchanged apart from a quotes/$(...)/backslash case and cleanup via __secret_delete_credmanager. Linux: all 9 suites pass, shellcheck 0.11.0 clean (CI flags). Mutation check: main's credmanager.sh fails 21 of 24, including both argv asserts and the failed-set exit code. Not exercised: real powershell.exe + CredentialManager (no Windows here; CI has none either). Status: REVIEW
+
+## 2026-11-17 — #483 secrets-backup waits for bw-unlock (branch steward/483)
+
+### Decisions
+- D19 (2026-11-17) backup: only a `locked` vault triggers `bw-unlock --wait` (unauthenticated/unreachable fail at once: bw-unlock cannot log in); after the wait the status is re-read through `bw` (dotfiles' wrapper loads the stored session); the failure hint names `bw-unlock` when it is on PATH, else the `export BW_SESSION` line — assumptions: dotfiles' `bw` wrapper precedes the real CLI on PATH wherever bw-unlock is — undo: revert b8e2b84
+- D20 (2026-11-17) scope: secrets-bridge's provider and Steward's executor prompt are other repos; filed as follow-up cards instead of writing to their checkouts from this run — undo: n/a
+
+### Log
+- b8e2b84: test_backup 52/52 (14 new asserts: wait-then-run, timeout, logged-out, no-bw-unlock fallback; stub bw-unlock shadows the real one so the suite stays hermetic on a dotfiles machine). Mutation: main's script fails 6 of the new asserts. All 9 suites pass; shellcheck 0.11.0 clean. Status: REVIEW
