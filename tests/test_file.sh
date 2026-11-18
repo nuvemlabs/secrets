@@ -37,6 +37,8 @@ DB_PORT=5432
 # Another comment
 EMPTY_VALUE=
 SPECIAL_CHARS=p@$$w0rd!#%^&*()
+OPT_N=-n
+OPT_E=-e
 TESTDATA
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -115,7 +117,7 @@ fi
 
 # Test: list returns all keys
 echo "-- list all keys --"
-expected_keys="API_KEY DB_HOST DB_PORT EMPTY_VALUE SPECIAL_CHARS"
+expected_keys="API_KEY DB_HOST DB_PORT EMPTY_VALUE SPECIAL_CHARS OPT_N OPT_E"
 actual_keys=$(echo "$list_output" | tr '\n' ' ' | sed 's/ $//')
 assert_eq "list returns all keys" "$expected_keys" "$actual_keys"
 
@@ -128,6 +130,13 @@ assert_eq "empty value returns empty string" "" "$result"
 echo "-- special characters --"
 result=$(__secret_get_file "SPECIAL_CHARS")
 assert_eq "special characters preserved" 'p@$$w0rd!#%^&*()' "$result"
+
+# Test: values that echo would read as options
+echo "-- option-like values --"
+result=$(__secret_get_file "OPT_N")
+assert_eq "value '-n' read back exactly" "-n" "$result"
+result=$(__secret_get_file "OPT_E")
+assert_eq "value '-e' read back exactly" "-e" "$result"
 
 # Test: __secrets_file returns the configured path
 echo "-- secrets file path --"
