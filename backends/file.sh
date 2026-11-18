@@ -38,7 +38,7 @@ __secret_get_file() {
         case "$line" in
             ''|\#*) continue ;;
             "$key="*)
-                echo "${line#*=}"
+                printf '%s\n' "${line#*=}"
                 return 0
                 ;;
         esac

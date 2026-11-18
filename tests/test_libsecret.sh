@@ -101,6 +101,17 @@ __secret_set_libsecret "test-special" 'p@$$w0rd!#%^&*(){}[]|'
 result=$(__secret_get_libsecret "test-special")
 assert_eq "special characters preserved" 'p@$$w0rd!#%^&*(){}[]|' "$result"
 
+# Test: values that echo would read as options are stored, not dropped
+echo "-- option-like values --"
+register_key "test-opt-n"
+register_key "test-opt-e"
+__secret_set_libsecret "test-opt-n" "-n"
+__secret_set_libsecret "test-opt-e" "-e"
+result=$(__secret_get_libsecret "test-opt-n")
+assert_eq "set/get round-trips '-n'" "-n" "$result"
+result=$(__secret_get_libsecret "test-opt-e")
+assert_eq "set/get round-trips '-e'" "-e" "$result"
+
 # Test: list secrets
 echo "-- list --"
 register_key "test-list-a"

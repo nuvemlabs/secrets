@@ -288,7 +288,7 @@ EOF
     fi
 
     if [[ -n "$value" ]]; then
-        echo "$value"
+        printf '%s\n' "$value"
     else
         echo "Secret '$key' not found" >&2
         return 1
@@ -536,19 +536,19 @@ EOF
 
     if [[ -n "$value" ]]; then
         if [[ "$copy" == true ]] && command -v pbcopy &>/dev/null; then
-            echo -n "$value" | pbcopy
+            printf '%s' "$value" | pbcopy
             echo "Copied to clipboard: $selected"
         elif [[ "$copy" == true && -n "${WAYLAND_DISPLAY:-}" ]] && command -v wl-copy &>/dev/null; then
             printf '%s' "$value" | wl-copy
             echo "Copied to clipboard: $selected"
         elif [[ "$copy" == true ]] && command -v xclip &>/dev/null; then
-            echo -n "$value" | xclip -selection clipboard
+            printf '%s' "$value" | xclip -selection clipboard
             echo "Copied to clipboard: $selected"
         elif [[ "$copy" == true ]] && command -v clip.exe &>/dev/null; then
-            echo -n "$value" | clip.exe
+            printf '%s' "$value" | clip.exe
             echo "Copied to clipboard: $selected"
         else
-            echo "$value"
+            printf '%s\n' "$value"
         fi
     else
         echo "Could not retrieve secret" >&2

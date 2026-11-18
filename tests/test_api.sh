@@ -432,6 +432,61 @@ else
     rm -rf "$FZ_STUB"
 fi
 
+# Test: values that look like echo options (-n, -e, -E, -neE) come back as-is.
+# `echo "$value"` treats them as flags and prints nothing, so a secret whose
+# whole value is "-n" read back blank.
+echo "-- option-like values survive secret_get --"
+OPT_DIR="$(mktemp -d)"
+printf 'OPT_N=-n\nOPT_E=-e\nOPT_CAP_E=-E\nOPT_NEE=-neE\n' > "$OPT_DIR/tokens"
+for pair in "OPT_N:-n" "OPT_E:-e" "OPT_CAP_E:-E" "OPT_NEE:-neE"; do
+    opt_key="${pair%%:*}"
+    opt_value="${pair#*:}"
+    # shellcheck disable=SC2034  # read by secret_get / the file backend
+    result=$(
+        __SECRETS_BACKEND="file"
+        SECRETS_FILE_PATH="$OPT_DIR/tokens"
+        secret_get "$opt_key" || true
+    )
+    assert_eq "file fallback returns '$opt_value' exactly" "$opt_value" "$result"
+    result=$(
+        __SECRETS_BACKEND="libsecret"
+        __secret_get_libsecret() { printf '%s' "$opt_value"; }
+        secret_get "$opt_key" || true
+    )
+    assert_eq "native backend value '$opt_value' printed exactly" "$opt_value" "$result"
+done
+
+# Test: secret_fz prints and copies an option-like value unchanged. xclip is
+# stubbed and Wayland unset so the xclip branch runs; skipped where pbcopy
+# exists (it takes precedence on macOS).
+echo "-- secret_fz with an option-like value --"
+if command -v pbcopy &>/dev/null; then
+    echo "  SKIP: pbcopy present (macOS clipboard wins)"
+else
+    printf '#!/bin/bash\nhead -n1\n' > "$OPT_DIR/fzf"
+    printf '#!/bin/bash\ncat > "%s/clipboard"\n' "$OPT_DIR" > "$OPT_DIR/xclip"
+    chmod +x "$OPT_DIR/fzf" "$OPT_DIR/xclip"
+    fz_out=$(
+        # shellcheck disable=SC2034  # read by secret_fz
+        PATH="$OPT_DIR:$PATH"
+        unset WAYLAND_DISPLAY
+        secret_list() { echo "FZ_KEY"; }
+        secret_get() { printf '%s' '-n'; }
+        secret_fz -c || true
+    )
+    assert_contains "secret_fz -c via xclip reports the copy" "Copied to clipboard: FZ_KEY" "$fz_out"
+    assert_eq "secret_fz -c puts '-n' on the xclip clipboard" "-n" "$(cat "$OPT_DIR/clipboard" 2>/dev/null)"
+    fz_out=$(
+        # shellcheck disable=SC2034  # read by secret_fz
+        PATH="$OPT_DIR:$PATH"
+        secret_list() { echo "FZ_KEY"; }
+        secret_get() { printf '%s' '-e'; }
+        secret_fz || true
+    )
+    assert_eq "secret_fz without -c prints '-e' exactly" "-e" "$fz_out"
+fi
+rm -rf "$OPT_DIR"
+
 # ─────────────────────────────────────────────────────────────────────────────
 #   Results
 # ─────────────────────────────────────────────────────────────────────────────

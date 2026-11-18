@@ -22,7 +22,7 @@ __secret_get_libsecret() {
 __secret_set_libsecret() {
     local key="$1"
     local value="$2"
-    echo -n "$value" | secret-tool store --label="$key" service "$SECRETS_SERVICE" key "$key" 2>/dev/null
+    printf '%s' "$value" | secret-tool store --label="$key" service "$SECRETS_SERVICE" key "$key" 2>/dev/null
 }
 
 __secret_delete_libsecret() {
